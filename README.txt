@@ -1,0 +1,45 @@
+Model-Based EM Source Separation and Localization
+
+Copyright 2006-2009 Michael I Mandel and Ron Weiss, all rights reserved
+<mim@ee.columbia.ed> and <ronw@ee.columbia.edu>
+Last updated 2009-08-20
+
+
+Basic usage to separate two sources:
+
+% Load stereo wav files of the same length
+y1 = wavread('XXX1.wav');
+y2 = wavread('XXX2.wav');
+lr = y1 + y2;
+
+% Run MESSL
+[m,p] = messl(lr, tau, 2, 'vis', 1);
+
+% Reconstruct wavforms from masks
+yhat1 = reconstruct(m, lr, 1);
+yhat2 = reconstruct(m, lr, 2);
+
+
+
+Fancier usage, initialized from PHAT-histogram:
+
+% Localize and then run MESSL
+tdoa = phatLoc(LR, tau, 2, 1024, 1);
+[m,p] = messl(lr, tau, 2, 'vis', 1, 'tauPosInit', tdoa);
+
+
+
+Even fancier usage, garbage source and ILD prior (better in reverb,
+but only when using dummy-head recordings):
+
+[m,p] = messl(lr, tau, 2, 'vis', 1, 'ildPriorPrec', 3, ...
+              'GarbageSrc', 1, 'sr', 16000);
+
+
+
+Can also use prob2mask to make the mask more definitive, i.e. closer
+to binary, but not binary.
+
+m2 = prob2mask(m);
+yhat1 = reconstruct(m2, lr, 1);
+yhat2 = reconstruct(m2, lr, 2);
