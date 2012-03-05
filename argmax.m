@@ -6,7 +6,6 @@ function am = argmax(X, dim)
 % supplied, find the maximum index along the dimension dim.
 
 % Copyright (C) 2005 Michael Mandel, mim at ee columbia edu;
-% distributable under GPL
 
 if(nargin < 2)
   [dummy, am] = max(X);
