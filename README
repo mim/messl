@@ -7,6 +7,8 @@ Last updated 2009-08-20
 
 Basic usage to separate two sources:
 
+addpath('./plottools/')
+
 % % Load stereo wav files of the same length and mix them
 % y1 = wavread('data/src1.wav');
 % y2 = wavread('data/src2.wav');
