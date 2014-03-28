@@ -7,10 +7,13 @@ Last updated 2009-08-20
 
 Basic usage to separate two sources:
 
-% Load stereo wav files of the same length
-y1 = wavread('XXX1.wav');
-y2 = wavread('XXX2.wav');
-lr = y1 + y2;
+% % Load stereo wav files of the same length and mix them
+% y1 = wavread('data/src1.wav');
+% y2 = wavread('data/src2.wav');
+% lr = y1' + y2';
+
+% Load pre-mixed version of those two files (don't forget the transpose)
+lr = wavread('data/mix.wav')';
 
 % Run MESSL
 [m,p] = messl(lr, tau, 2, 'vis', 1);
@@ -24,7 +27,7 @@ yhat2 = reconstruct(m, lr, 2);
 Fancier usage, initialized from PHAT-histogram:
 
 % Localize and then run MESSL
-tdoa = phatLoc(LR, tau, 2, 1024, 1);
+tdoa = phatLoc(lr, tau, 2, 1024, 1);
 [m,p] = messl(lr, tau, 2, 'vis', 1, 'tauPosInit', tdoa);
 
 
