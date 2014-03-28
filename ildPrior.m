@@ -19,6 +19,6 @@ end
 itd_mat = repmat(itds(:), 1, length(freqs));
 frq_mat = repmat(freqs(:)', length(itds), 1);
 
-X = x2fx([itd_mat(:) frq_mat(:)], model);
+X = x2fx2([itd_mat(:) frq_mat(:)], model);
 
 mu = reshape(b * X', length(itds), [])';
