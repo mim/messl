@@ -10,12 +10,21 @@ Basic usage to separate two sources:
 addpath('./plottools/')
 
 % % Load stereo wav files of the same length and mix them
-% y1 = wavread('data/src1.wav');
-% y2 = wavread('data/src2.wav');
+% [y1 fs] = wavread('data/src1.wav');
+% [y2 fs] = wavread('data/src2.wav');
 % lr = y1' + y2';
 
 % Load pre-mixed version of those two files (don't forget the transpose)
-lr = wavread('data/mix.wav')';
+[lr fs] = wavread('data/mix.wav');
+lr = lr';
+
+% Derive grid of tau values (use your numbers here)
+c    = 340;  % speed of sound in air [M/s]
+d    = 0.3;  % slightly more than the acoustic distance between microphones [M]
+nTau = 31;   % number of tau samples to use
+
+maxItd = fs * d / c;  % maximum ITD [samples]
+tau = linspace(-maxItd, maxItd, nTau);
 
 % Run MESSL
 [m,p] = messl(lr, tau, 2, 'vis', 1);
