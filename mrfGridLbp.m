@@ -9,7 +9,8 @@ function marginals = mrfGridLbp(dataPot, compatPot, nIter, doPlot)
 %
 % Inputs:
 %   dataPot    data potential, FxTxI matrix (freq x time x state)
-%   compatPot  compatibility potential, IxIx4 for 4-neighbors, 
+%   compatPot  compatibility potential for 4-neighbors, IxIx4 for
+%              frequency-independent or FxIxIx4 for frequency-dependent
 %   nIter      number of iterations of loopy BP
 %
 % Outputs:
@@ -27,9 +28,15 @@ function marginals = mrfGridLbp(dataPot, compatPot, nIter, doPlot)
 
 if ~exist('doPlot', 'var') || isempty(doPlot), doPlot = 0; end
 
+
 [F T I] = size(dataPot);
 nNeigh = 4;
 messages = 1/I * ones([F T I nNeigh]);
+
+if ndims(compatPot) == 3
+    % Convert from frequency-independent to frequency-dependent
+    compatPot = repmat(permute(compatPot, [4 1 2 3]), [F 1 1 1]);
+end
 
 for iter = 1:nIter
     for neigh = 1:nNeigh
@@ -40,7 +47,7 @@ for iter = 1:nIter
         msg = zeros([F T I]);
         for i1 = 1:I
             for i2 = 1:I
-                msg(:,:,i1) = msg(:,:,i1) + dataPot(:,:,i2) .* incomingMsgs(:,:,i2) .* compatPot(i1,i2,neigh);
+                msg(:,:,i1) = msg(:,:,i1) + bsxfun(@times, dataPot(:,:,i2).*incomingMsgs(:,:,i2), compatPot(:,i1,i2,neigh));
             end
         end
         msg = bsxfun(@rdivide, msg, sum(msg,3) + 1e-9);
