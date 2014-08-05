@@ -1,4 +1,4 @@
-function counts = countIbmNeighbors(outFile, cleanDir, noisyDir, thresh_db, nfft, fs)
+function counts = countIbmNeighbors(outFile, cleanDir, thresh_db, nfft, fs)
 
 % Count co-ocurrences of neighbors in ideal binary masks
 %
@@ -8,28 +8,43 @@ function counts = countIbmNeighbors(outFile, cleanDir, noisyDir, thresh_db, nfft
 if ~exist('thresh_db', 'var') || isempty(thresh_db), thresh_db = 0; end
 if ~exist('nfft', 'var') || isempty(nfft), nfft = 1024; end
 if ~exist('fs', 'var') || isempty(fs), fs = 16000; end
+nFiles = 20;
 
-cf = findFiles(cleanDir, '.wav');
-nf = findFiles(noisyDir, '.wav');
-files = intersect(cf, nf);
+[cf nf] = getFileNames(cleanDir, nFiles);
 
 F = nfft/2 + 1;  % number of frequencies
 I = 2;           % number of classes (same vs different)
 nNeigh = 4;      % number of neighbors in grid MRF
 counts = ones([F I I nNeigh]);
-for f = 1:length(files)
-    ibm = computeIbm(cleanDir, noisyDir, files{f}, thresh_db, nfft, fs);
+for f = 1:length(cf)
+    ibm = computeIbm(cf{f}, nf{f}, thresh_db, nfft, fs);
+    ibm = trimIbm(ibm);
     counts = updateCounts(counts, ibm, nNeigh);
 end
+counts = counts(2:end-1,:,:,:);
 clear ibm
 
 save(outFile)
 
 
-function ibm = computeIbm(cleanDir, noisyDir, fileName, thresh_db, nfft, fs)
+function [cf nf] = getFileNames(cleanDir, nFiles)
+[~,cf] = findFiles(cleanDir, '-tgt.wav');
+ord = randperm(length(cf));
+cf = cf(ord(1:nFiles));
 
-[clr cfs] = wavReadBetter(fullfile(cleanDir, fileName));
-[nlr nfs] = wavReadBetter(fullfile(noisyDir, fileName));
+nf = cell(size(cf));
+for i = 1:length(cf)
+    nf{i} = mapCleanToNoisyFile(cf{i});
+end
+
+function nf = mapCleanToNoisyFile(cf)
+nf = strrep(strrep(cf, '-tgt', ''), 'anech', 'reverb');
+
+
+function ibm = computeIbm(cleanFile, noisyFile, thresh_db, nfft, fs)
+
+[clr cfs] = wavReadBetter(cleanFile);
+[nlr nfs] = wavReadBetter(noisyFile);
 
 clr = resample(clr, fs, cfs);
 nlr = resample(nlr, fs, nfs);
@@ -42,6 +57,20 @@ target = 0.5 * (db(abs(cL)) + db(abs(cR)));
 noise  = 0.5 * (db(abs(nL - cL)) + db(abs(nR - cR)));
 
 ibm = target - noise > thresh_db;
+
+
+function ibm = trimIbm(ibm)
+% Trim off beginning and ending frames with no target
+nTarget = sum(ibm,1);
+start = 1;
+while nTarget(start) == 0
+    start = start + 1;
+end
+stop = length(nTarget);
+while nTarget(stop) == 0
+    stop = stop - 1;
+end
+ibm = ibm(:,start:stop);
 
 
 function counts = updateCounts(counts, ibm, nNeigh)
