@@ -62,14 +62,14 @@ function [p_lr_iwt, params] = messl(lr, tau, I, varargin)
 [tauPosInit, pTauIInit, ildInit, ildStdInit, maskInit, garbageSrc, ...
  ipdMode, ildMode, xiMode, sigmaMode, dctMode, spMode, nfft, ...
  vis, Nrep, modes, sigmaInit, xiInit, sourcePriors, maskHold, ...
- reliability, ildPriorPrec, sr] = ...
+ reliability, ildPriorPrec, sr, mrfCompatFile] = ...
     process_options(varargin, 'tauPosInit', [], 'pTauIInit', [], ...
     'ildInit', 0, 'ildStdInit', 10, 'maskInit', [], ...
     'garbageSrc', 0, 'ipdMode', 1, 'ildMode', -1, 'xiMode', -1, ...
     'sigmaMode', -1, 'dctMode', 0, 'spMode', 0, 'nfft', 1024, 'vis', 0, ...
     'Nrep', 16, 'modes', [], 'sigmaInit', [], 'xiInit', [], ...
     'sourcePriors', [], 'maskHold', 0, 'reliability', [], ...
-    'ildPriorPrec', 0, 'sr', 16000);
+    'ildPriorPrec', 0, 'sr', 16000, 'mrfCompatFile', '');
 
 if ~isempty(modes)
   ipdMode   = modes(1);
@@ -134,6 +134,8 @@ ildParams = initIld(I, W, sr, Nrep, ildInit, ildStdInit, ...
 [spParams C] = initSp(I, W, L, R, sourcePriors, ildStdInit, dctMode, ...
                       spMode, garbageSrc, B);
                   
+mrfCompatPot = loadMrfCompat(mrfCompatFile, I, garbageSrc);
+                  
 % The rest of the code should act like the garbage source is like
 % any other source, except for the M step, which has to know about
 % it so it doesn't update it
@@ -186,7 +188,7 @@ for rep=1:Nrep
   [ll(rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
       computePosterior(W, T, I, Nt, C, logMaskPrior, ...
       ipdParams, lpIpd, ildParams, lpIld, spParams, lpSp, ...
-      vis || rep == Nrep, reliability);
+      vis || rep == Nrep, reliability, mrfCompatPot);
   clear lp*
   if rep >= maskHold
     logMaskPrior = [];
@@ -976,14 +978,30 @@ end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% MRF Functions
+function mrfCompatPot = loadMrfCompat(mrfCompatFile, I, garbageSrc)
+% Hard coded for 2 sources and a garbage source for now...
+countsExp = 0.2;
+
+if isempty(mrfCompatFile) || ~exist(mrfCompatFile, 'file') || (I ~= 2)
+    mrfCompatPot = [];
+else
+    load(mrfCompatFile);
+    mrfCompatPot = counts.^countsExp;
+end
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function [ll p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
     computePosterior(W, T, I, Nt, C, logMaskPrior, ...
-    ipdParams, lpIpd, ildParams, lpIld, spParams, lpSp, vis, reliability)
+    ipdParams, lpIpd, ildParams, lpIld, spParams, lpSp, vis, reliability, mrfCompatPot)
 % Defaults
 nuIpd = single(lpIpd); maskIpd = 0;
 nuIld = single(lpIld); maskIld = 0;
 nuSp  = single(lpSp);  maskSp  = 0;
+
+mrfLbpIter = 8;
 
 if vis || ~spParams.spMode
   % Normalize each term separated to demonstrate the contribution of
@@ -1106,6 +1124,13 @@ else
     end
 %    dbstop
   end
+end
+
+if ~isempty(mrfCompatPot)
+    newNuIld = mrfGridLbp(nuIld, mrfCompatPot, mrfLbpIter);
+    nuIpd = bsxfun(@times, nuIpd, newNuIld ./ nuIld);
+    nuIld = newNuIld;
+    p_lr_iwt = repmat(permute(nuIld, [4 1 2 3]), [2 1 1 1]);
 end
 
 if ~isempty(reliability)
