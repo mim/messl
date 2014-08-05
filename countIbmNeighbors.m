@@ -10,16 +10,16 @@ if ~exist('nfft', 'var') || isempty(nfft), nfft = 1024; end
 if ~exist('fs', 'var') || isempty(fs), fs = 16000; end
 nFiles = 20;
 
-[cf nf] = getFileNames(cleanDir, nFiles);
+[cf nf rf] = getFileNames(cleanDir, nFiles);
 
 F = nfft/2 + 1;  % number of frequencies
-I = 2;           % number of classes (same vs different)
+I = 3;           % number of classes (src1, src2, garbargeSrc)
 nNeigh = 4;      % number of neighbors in grid MRF
 counts = ones([F I I nNeigh]);
 for f = 1:length(cf)
-    ibm = computeIbm(cf{f}, nf{f}, thresh_db, nfft, fs);
-    ibm = trimIbm(ibm);
-    counts = updateCounts(counts, ibm, nNeigh);
+    maxSrc = computeIbm(cf{f}, nf{f}, rf{f}, thresh_db, nfft, fs);
+    %ibm = trimIbm(ibm);
+    counts = updateCounts(counts, maxSrc, nNeigh);
 end
 counts = counts(2:end-1,:,:,:);
 clear ibm
@@ -27,37 +27,41 @@ clear ibm
 save(outFile)
 
 
-function [cf nf] = getFileNames(cleanDir, nFiles)
+function [cf nf rf] = getFileNames(cleanDir, nFiles)
+% cf: anechoic target, nf: anechoic mixture, rf: reverberant mixture
 [~,cf] = findFiles(cleanDir, '-tgt.wav');
 ord = randperm(length(cf));
 cf = cf(ord(1:nFiles));
 
 nf = cell(size(cf));
+rf = cell(size(cf));
 for i = 1:length(cf)
-    nf{i} = mapCleanToNoisyFile(cf{i});
+    nf{i} = strrep(cf{i}, '-tgt', '');
+    rf{i} = strrep(nf{i}, 'anech', 'reverb');
 end
 
-function nf = mapCleanToNoisyFile(cf)
-nf = strrep(strrep(cf, '-tgt', ''), 'anech', 'reverb');
 
+function maxSrc = computeIbm(cleanFile, noisyFile, reverbFile, thresh_db, nfft, fs)
 
-function ibm = computeIbm(cleanFile, noisyFile, thresh_db, nfft, fs)
+[cL cR] = loadSpec(cleanFile, nfft, fs);
+[nL nR] = loadSpec(noisyFile, nfft, fs);
+[rL rR] = loadSpec(reverbFile, nfft, fs);
 
-[clr cfs] = wavReadBetter(cleanFile);
-[nlr nfs] = wavReadBetter(noisyFile);
+src1 = combineChannels(cL, cR);
+src2 = combineChannels(nL-cL, nR-cR);
+rev  = combineChannels(rL-nL, rR-nR);
 
-clr = resample(clr, fs, cfs);
-nlr = resample(nlr, fs, nfs);
+srcs = cat(3, src1, src2, rev);
+[~,maxSrc] = max(srcs, [], 3);
 
-[cL,cR] = binSpec(clr', nfft);
-[nL,nR] = binSpec(nlr', nfft);
+function [L R] = loadSpec(fileName, nfft, fs)
+[lr tfs] = wavReadBetter(fileName);
+lr = resample(lr, fs, tfs);
+[L R] = binSpec(lr', nfft);
 
-% Use geometric average magnitude of the two channels
-target = 0.5 * (db(abs(cL)) + db(abs(cR)));
-noise  = 0.5 * (db(abs(nL - cL)) + db(abs(nR - cR)));
-
-ibm = target - noise > thresh_db;
-
+function C = combineChannels(L, R)
+% Geometric average magnitude of the two channels
+C = 0.5 * (db(abs(L)) + db(abs(R)));
 
 function ibm = trimIbm(ibm)
 % Trim off beginning and ending frames with no target
@@ -73,7 +77,7 @@ end
 ibm = ibm(:,start:stop);
 
 
-function counts = updateCounts(counts, ibm, nNeigh)
+function counts = updateCounts(counts, maxSrc, nNeigh)
 % Counts is FxIxIx4, where dimensions are (frequency, targetClass,
 % neighborClass, neighborDirection).
 %
@@ -81,15 +85,14 @@ function counts = updateCounts(counts, ibm, nNeigh)
 %             4  X  2   df = [-1  0  1  0] = mod(n,  2).*(n-2)
 %                3      dt = [ 0  1  0 -1] = mod(n+1,2).*(3-n)
 
-[F T] = size(ibm);
-ibm = 1 + ibm;   % {0,1} -> {1,2}
+[F T] = size(maxSrc);
 for n = 1:nNeigh
     df = mod(n,   2).*(n - 2);  % [-1  0  1  0];
     dt = mod(n+1, 2).*(3 - n);  % [ 0  1  0 -1];
     
     fi = max(1,1-df):min(F,F-df);
-    target = ibm(fi, max(1,1-dt):min(T,T-dt));
-    neighbor = ibm(max(1,1+df):min(F,F+df), max(1,1+dt):min(T,T+dt));
+    target = maxSrc(fi, max(1,1-dt):min(T,T-dt));
+    neighbor = maxSrc(max(1,1+df):min(F,F+df), max(1,1+dt):min(T,T+dt));
 
     for i1 = 1:size(counts,2)
         for i2 = 1:size(counts,3)
