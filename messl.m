@@ -229,6 +229,7 @@ params = struct('p_tauI', ipdParams.p_tauI, ...
     'ildParams', ildParams, 'maskIld', maskIld, ...
     'spParams', spParams, 'maskSp', maskSp);
 
+% Compute hard masks, potentially using the MRF model
 mrfLbpIter = 8;
 [~,~,~,hardSrcs] = applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExpSched(min(end,Nrep)), mrfLbpIter, 'max');
 hardMasks = zeros(size(p_lr_iwt));
