@@ -29,14 +29,14 @@ save(outFile)
 
 function [cf nf rf] = getFileNames(cleanDir, nFiles)
 % cf: anechoic target, nf: anechoic mixture, rf: reverberant mixture
-[~,cf] = findFiles(cleanDir, '-tgt.wav');
+[~,cf] = findFiles(cleanDir, '-src1.wav');
 ord = randperm(length(cf));
 cf = cf(ord(1:nFiles));
 
 nf = cell(size(cf));
 rf = cell(size(cf));
 for i = 1:length(cf)
-    nf{i} = strrep(cf{i}, '-tgt', '');
+    nf{i} = strrep(cf{i}, '-src1', '');
     rf{i} = strrep(nf{i}, 'anech', 'reverb');
 end
 
