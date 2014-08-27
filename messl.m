@@ -1,6 +1,6 @@
-function [p_lr_iwt, params] = messl(lr, tau, I, varargin)
+function [p_lr_iwt params hardMasks] = messl(lr, tau, I, varargin)
 
-% [p_lr_iwt, params] = messl(lr, tau, I, [name1, value1] ...)
+% [p_lr_iwt params hardMasks] = messl(lr, tau, I, [name1, value1] ...)
 %
 % Perform MESSL algorithm (including ILD, frequency-dependent ITD,
 % source prior GMMs) on a stereo mixture of I spatially separated
@@ -153,6 +153,8 @@ ll = [];
 
 % Start EM
 for rep=1:Nrep
+  clear nu*
+
   % Turn on SP mode if we've reached the appropriate iteration.
   if rep == spParams.spStartRep
     spParams.spMode = spParams.origSpMode;
@@ -213,7 +215,6 @@ for rep=1:Nrep
     spParams = updateSpParams(W, T, I, Nt, C, rep, spParams, nuSp, ...
         L, R, Nrep);
   end
-  clear nu*
   
   if vis
     visualizeParams(W, T, I, tau, sr, ipdParams, ildParams, spParams, ...
@@ -227,6 +228,13 @@ params = struct('p_tauI', ipdParams.p_tauI, ...
     'ipdParams', ipdParams, 'maskIpd', maskIpd, ...
     'ildParams', ildParams, 'maskIld', maskIld, ...
     'spParams', spParams, 'maskSp', maskSp);
+
+mrfLbpIter = 8;
+[~,~,~,hardSrcs] = applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExpSched(min(end,Nrep)), mrfLbpIter, 'max');
+hardMasks = zeros(size(p_lr_iwt));
+for i = 1:max(hardSrcs(:))
+    hardMasks(:,:,:,i) = repmat(permute(hardSrcs == i, [3 1 2]), [2 1 1]);
+end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1128,18 +1136,26 @@ else
   end
 end
 
-if ~isempty(mrfCompatPot)
-    newNuIld = mrfGridLbp(nuIld, mrfCompatPot.^mrfCompatExp, mrfLbpIter);
-    nuIpd = bsxfun(@times, nuIpd, newNuIld ./ nuIld);
-    nuIld = newNuIld;
-    p_lr_iwt = repmat(permute(nuIld, [4 1 2 3]), [2 1 1 1]);
-end
+[p_lr_iwt nuIld nuIpd] = applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExp, mrfLbpIter, 'sum');
 
 if ~isempty(reliability)
   nuIpd = nuIpd .* repmat(reliability, [1 1 I Nt]);
   nuIld = nuIld .* repmat(reliability, [1 1 I]);
   nuSp  = nuSp  .* repmat(permute(reliability, [3 1 2]), [2 1 1 I C]);
 end
+
+
+function [p_lr_iwt nuIld nuIpd hardSrcs] = applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExp, mrfLbpIter, bpType)
+
+if ~isempty(mrfCompatPot) && (mrfCompatExp ~= 0)
+    [newNuIld hardSrcs] = mrfGridLbp(nuIld, mrfCompatPot.^mrfCompatExp, mrfLbpIter, bpType);
+    nuIpd = bsxfun(@times, nuIpd, newNuIld ./ nuIld);
+    nuIld = newNuIld;
+    p_lr_iwt = repmat(permute(nuIld, [4 1 2 3]), [2 1 1 1]);
+else
+    [~,hardSrcs] = max(squeeze(p_lr_iwt(1,:,:,:)), [], 3);
+end
+
 
 
 function visualizeParams(W, T, I, tau, sr, ipdParams, ildParams, spParams, ...
