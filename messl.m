@@ -62,15 +62,17 @@ function [p_lr_iwt params hardMasks] = messl(lr, tau, I, varargin)
 [tauPosInit, pTauIInit, ildInit, ildStdInit, maskInit, garbageSrc, ...
  ipdMode, ildMode, xiMode, sigmaMode, dctMode, spMode, nfft, ...
  vis, Nrep, modes, sigmaInit, xiInit, sourcePriors, maskHold, ...
- reliability, ildPriorPrec, sr, mrfCompatFile mrfCompatExpSched] = ...
+ reliability, ildPriorPrec, sr, mrfHardCompatExp, mrfCompatFile ...
+ mrfCompatExpSched fixIPriors] = ...
     process_options(varargin, 'tauPosInit', [], 'pTauIInit', [], ...
     'ildInit', 0, 'ildStdInit', 10, 'maskInit', [], ...
     'garbageSrc', 0, 'ipdMode', 1, 'ildMode', -1, 'xiMode', -1, ...
     'sigmaMode', -1, 'dctMode', 0, 'spMode', 0, 'nfft', 1024, 'vis', 0, ...
     'Nrep', 16, 'modes', [], 'sigmaInit', [], 'xiInit', [], ...
     'sourcePriors', [], 'maskHold', 0, 'reliability', [], ...
-    'ildPriorPrec', 0, 'sr', 16000, ...
-    'mrfCompatFile', '', 'mrfCompatExpSched', [0 0 0 0 0.1]);
+    'ildPriorPrec', 0, 'sr', 16000, 'mrfHardCompatExp', 0, ...
+    'mrfCompatFile', '', 'mrfCompatExpSched', [0 0 0 0 .02 .02 .02 .02 .05], ...
+    'fixIPriors', 0);
 
 if ~isempty(modes)
   ipdMode   = modes(1);
@@ -125,7 +127,7 @@ end
 % Initialize the probability distributions and other parameters
 [ipdParams itds] = initIpd(I, W, Nrep, tau, sr, lr, tauPosInit, pTauIInit, ...
                            sigmaInit, xiInit, ipdMode, xiMode, sigmaMode, ...
-                           garbageSrc, vis);
+                           garbageSrc, vis, fixIPriors);
 clear lr
 %FIXME
 ildParams = initIld(I, W, sr, Nrep, ildInit, ildStdInit, ...
@@ -203,6 +205,8 @@ for rep=1:Nrep
 
   
   %%%% M step: use nu matrix to calcuate parameters
+  nuIpd = enforceIPriors(nuIpd, ipdParams);
+      
   if ipdParams.ipdMode
     ipdParams = updateIpdParams(W, T, I, Nt, C, rep, ipdParams, ...
                                 nuIpd, angE);
@@ -231,7 +235,7 @@ params = struct('p_tauI', ipdParams.p_tauI, ...
 
 % Compute hard masks, potentially using the MRF model
 mrfLbpIter = 8;
-[~,~,~,hardSrcs] = applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExpSched(min(end,Nrep)), mrfLbpIter, 'max');
+[~,~,~,hardSrcs] = applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfHardCompatExp, mrfLbpIter, 'max');
 hardMasks = zeros(size(p_lr_iwt));
 for i = 1:max(hardSrcs(:))
     hardMasks(:,:,:,i) = repmat(permute(hardSrcs == i, [3 1 2]), [2 1 1]);
@@ -242,7 +246,7 @@ end
 % IPD functions
 function [ipdParams, itds] = ...
     initIpd(I, W, Nrep, tau, sr, lr, tauPosInit, pTauIInit, sigmaInit, ...
-            xiInit, ipdMode, xiMode, sigmaMode, garbageSrc, vis)
+            xiInit, ipdMode, xiMode, sigmaMode, garbageSrc, vis, fixIPriors)
 % Initialize p(tau | i) with smooth peaks centered on the peaks of
 % the cross-correlation, or at locations specified by the user.
 % Could also just supply the full probability distributions.
@@ -331,7 +335,7 @@ end
 ipdParams = struct('p_tauI', pTauI, 'xi_wit', xi_wit, 's2_wit', ...
     s2_wit, 'xiBands', xiBands, 'sigmaBands', sigmaBands, ...
     'ipdMode', ipdMode, 'xiMode', xiMode, 'sigmaMode', sigmaMode, ...
-    'garbageSrc', garbageSrc);
+    'garbageSrc', garbageSrc, 'fixIPriors', fixIPriors);
 
 
 function lpBin = computeIpdLogLikelihood(W, T, I, Nt, C, rep, ...
@@ -1146,10 +1150,11 @@ if ~isempty(reliability)
 end
 
 
-function [p_lr_iwt nuIld nuIpd hardSrcs] = applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExp, mrfLbpIter, bpType)
+function [p_lr_iwt nuIld nuIpd hardSrcs] = applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExp, mrfLbpIter, bpType, doPlot)
+if ~exist('doPlot', 'var') || isempty(doPlot), doPlot = 0; end
 
 if ~isempty(mrfCompatPot) && (mrfCompatExp ~= 0)
-    [newNuIld hardSrcs] = mrfGridLbp(nuIld, mrfCompatPot.^mrfCompatExp, mrfLbpIter, bpType);
+    [newNuIld hardSrcs] = mrfGridLbp(nuIld, mrfCompatPot.^mrfCompatExp, mrfLbpIter, bpType, doPlot);
     nuIpd = bsxfun(@times, nuIpd, newNuIld ./ nuIld);
     nuIld = newNuIld;
     p_lr_iwt = repmat(permute(nuIld, [4 1 2 3]), [2 1 1 1]);
@@ -1157,6 +1162,14 @@ else
     [~,hardSrcs] = max(squeeze(p_lr_iwt(1,:,:,:)), [], 3);
 end
 
+
+function nuIpd = enforceIPriors(nuIpd, ipdParams)
+if ipdParams.fixIPriors
+    newSrcPriors = mean(mean(sum(nuIpd, 4), 1), 2);
+    rescaling = permute(sum(ipdParams.p_tauI, 2), [2 3 1]) ./ newSrcPriors;
+    nuIpd = bsxfun(@times, rescaling, nuIpd);
+    assert(all(abs(squeeze(mean(mean(sum(nuIpd,4), 1), 2)) - squeeze(sum(ipdParams.p_tauI, 2))) < 1e-6));
+end
 
 
 function visualizeParams(W, T, I, tau, sr, ipdParams, ildParams, spParams, ...
@@ -1233,11 +1246,19 @@ if ~isempty(reliability)
   recovered_titles = {recovered_titles{:}, 'Reliability'};
 end
 
-plotall(mask_plots, 'title', mask_titles, 'figure', 1, 'subplot', ...
-        mask_layout, 'CLim', [0 1]);
+% plotall(mask_plots, 'title', mask_titles, 'figure', 1, 'subplot', ...
+%         mask_layout, 'CLim', [0 1]);
+% 
+% plotall(recovered_plots, 'title', recovered_titles, 'figure', 2, ...
+%         'subplot', recovered_layout, 'CLim', [-60 0]);
 
-plotall(recovered_plots, 'title', recovered_titles, 'figure', 2, ...
-        'subplot', recovered_layout, 'CLim', [-60 0]);
+fig_no_focus(1)
+subplots(mask_plots, mask_layout, mask_titles, @(r,c,i) caxis([0 1]));
+drawnow
+
+fig_no_focus(2)
+subplots(recovered_plots, recovered_layout, recovered_titles, @(r,c,i) caxis([-60 0]));
+drawnow
 
 % imgsc(mask_plots, 'title', mask_titles, 'figure', 1, 'subplot', ...
 %       mask_layout, 'caxis', [0 1]);
