@@ -997,7 +997,7 @@ end
 function mrfCompatPot = loadMrfCompat(mrfCompatFile, I, garbageSrc)
 % Hard coded for 2 sources and a garbage source for now...
 
-if isempty(mrfCompatFile) || ~exist(mrfCompatFile, 'file') || (I ~= 2)
+if isempty(mrfCompatFile) || ~exist(mrfCompatFile, 'file') % || (I ~= 2)
     mrfCompatPot = [];
 else
     load(mrfCompatFile);
@@ -1037,27 +1037,30 @@ end
 
 % This actually normalizes the joint distribution of i,tau,j,c not
 % the conditionals
+pBin = 0;
 if ipdParams.ipdMode
-  pBin = lpIpd;
+  pBin = pBin + lpIpd;
   clear lpIpd
-  if ~isempty(logMaskPrior)
+end
+  
+if ~isempty(logMaskPrior)
     pBin = pBin + repmat(logMaskPrior, [1 1 1 Nt]);
-  end
-  if ildParams.ildMode
+end
+
+if ildParams.ildMode
     pBin = pBin + repmat(lpIld, [1 1 1 Nt]);
-  end
-  clear lpIld
+end
+clear lpIld
 
 %   ls = linspace(-30,0,1000);
 %   figure(5), bar(ls, histc(pBin(:), ls)); drawnow
 
-  pBin = exp(pBin) + eps;
+pBin = exp(pBin) + eps;
 
 %   % Only use high relative probability points
 %   threshold = quantile(pBin(:), 0);
 
-  if any(pBin(:) <= 0), warning('pBin <= 0'), end
-end
+if any(pBin(:) <= 0), warning('pBin <= 0'), end
 
 if ~spParams.spMode
   norm = sum(sum(pBin,3),4);
@@ -1281,13 +1284,18 @@ else
   sp_cols = sum(modes ~= 0);
 end
 
-subplot(sp_rows,sp_cols,1)
-plot(tau, ipdParams.p_tauI')
-title('p(tau, i)');
-grid on
+curPlot = 1;
+if ipdParams.ipdMode
+    subplot(sp_rows,sp_cols,curPlot)
+    curPlot = curPlot + 1;
+    plot(tau, ipdParams.p_tauI')
+    title('p(tau, i)');
+    grid on
+end
 
 if ildParams.ildMode
-  subplot(sp_rows,sp_cols,2)
+  subplot(sp_rows,sp_cols,curPlot)
+  curPlot = curPlot + 1;
   plot(1:W, ildParams.mu_wi)
   hold on
   plot(1:W, ildParams.mu_wi + sqrt(ildParams.h2_wi), ':');
