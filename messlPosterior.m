@@ -33,9 +33,9 @@ if ipdMode
   pBin = pBin + lpIpd;
   clear lpIpd
 end
-  
+
 if ~isempty(logMaskPrior)
-    pBin = pBin + repmat(logMaskPrior, [1 1 1 Nt]);
+    pBin = bsxfun(@plus, pBin, logMaskPrior);
 end
 
 if ildMode
