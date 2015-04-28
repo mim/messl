@@ -1,6 +1,6 @@
 function [ll p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
     messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
-    ipdParams, lpIpd, ildParams, lpIld, spParams, lpSp, vis, reliability, ...
+    ipdMode, lpIpd, ildMode, lpIld, spMode, lpSp, vis, reliability, ...
     mrfCompatPot, mrfCompatExp)
 % Defaults
 nuIpd = single(lpIpd); maskIpd = 0;
@@ -9,18 +9,18 @@ nuSp  = single(lpSp);  maskSp  = 0;
 
 mrfLbpIter = 8;
 
-if vis || ~spParams.spMode
+if vis || ~spMode
   % Normalize each term separated to demonstrate the contribution of
   % each component to the overall posterior mask.
-  if ipdParams.ipdMode
+  if ipdMode
     maskIpd = sum(exp(lpIpd), 4);
     maskIpd = maskIpd ./ repmat(sum(maskIpd,3), [1 1 I]);
   end
-  if ildParams.ildMode
+  if ildMode
     maskIld = exp(lpIld);
     maskIld = maskIld ./ repmat(sum(maskIld,3), [1 1 I]);
   end
-  if spParams.spMode
+  if spMode
     maskSp = sum(squeeze(mean(exp(lpSp), 1)), 4);
     maskSp = maskSp ./ repmat(sum(maskSp,3), [1 1 I]);
   end
@@ -29,7 +29,7 @@ end
 % This actually normalizes the joint distribution of i,tau,j,c not
 % the conditionals
 pBin = 0;
-if ipdParams.ipdMode
+if ipdMode
   pBin = pBin + lpIpd;
   clear lpIpd
 end
@@ -38,7 +38,7 @@ if ~isempty(logMaskPrior)
     pBin = pBin + repmat(logMaskPrior, [1 1 1 Nt]);
 end
 
-if ildParams.ildMode
+if ildMode
     pBin = pBin + repmat(lpIld, [1 1 1 Nt]);
 end
 clear lpIld
@@ -53,7 +53,7 @@ pBin = exp(pBin) + eps;
 
 if any(pBin(:) <= 0), warning('pBin <= 0'), end
 
-if ~spParams.spMode
+if ~spMode
   norm = sum(sum(pBin,3),4);
   if any(norm(:) <= 0), warning('norm <= 0 (1)'), end
   nuIpd = pBin ./ repmat(norm, [1 1 I Nt]);
@@ -64,7 +64,7 @@ if ~spParams.spMode
   if any(norm(:) <= 0), warning('norm <= 0 (2)'), end
   ll = sum(sum(log(norm)));
 else
-  if ~ipdParams.ipdMode && ~ildParams.ildMode
+  if ~ipdMode && ~ildMode
     if ~isempty(logMaskPrior)
       lpSp = lpSp + permute(repmat(logMaskPrior, [1 1 1 2 C]), [4 1 2 3 5]);
     end
