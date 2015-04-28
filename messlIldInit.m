@@ -1,6 +1,8 @@
 function ildParams = messlIldInit(I, W, sr, Nrep, ildInit, ildStdInit, ...
                              priorPrec, ildMode, itds, dctMode, ...
-                             garbageSrc, B)
+                             garbageSrc)
+
+B = messlUtilDctInit(dctMode, W);
 ildParams = struct('ildMode', ildMode, 'dctMode', dctMode, ...
     'garbageSrc', garbageSrc, 'B', B);
 

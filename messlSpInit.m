@@ -1,5 +1,7 @@
 function [spParams C] = messlSpInit(I, W, L, R, sourcePriors, stdInit, ...
-    dctMode, spMode, garbageSrc, B)
+    dctMode, spMode, garbageSrc)
+
+B = messlUtilDctInit(dctMode, W);
 spParams = struct('spMode', spMode, 'dctMode', dctMode, ...
     'garbageSrc', garbageSrc, 'B', B);
 

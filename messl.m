@@ -88,37 +88,8 @@ if spMode && isempty(sourcePriors)
   warning('spMode set to 1, but ''sourcePriors'' option was not set.');
 end
 
-% Get cross correlation values semi-digested for probability
-% measures
-E = single(probCC(lr, tau, nfft));
-A = dB(E(:,:,1));
-angE = angle(E);
-cc = real(squeeze(sum(sum(E ./ abs(E), 1), 2)));
+[A angE cc W T Nt L R lr] = messlObsDerive(lr, tau, nfft);
 
-% Find appropriate dimension sizes
-W = size(E,1); T = size(E,2); Nt = length(tau);
-clear E
-
-% SP observations
-if ndims(lr) == 3
-  L = lr(:,:,1); R = lr(:,:,2);
-else
-  [L,R] = binSpec(lr, nfft);
-end
-lr = cat(3, L, R);
-L = dB(L);  L = L - max(max(L));
-R = dB(R);  R = R - max(max(R));
-%clear lr
-
-% DCT basis vectors
-if dctMode
-  B = zeros(W, dctMode);
-  B(:,1) = 1/sqrt(W);
-  B(:,2:end) = sqrt(2/W) * cos(pi/W * [0.5:W-0.5]'*[1:dctMode-1]);
-else
-  B = eye(W);
-end
-  
 % Giant matrix holding the responsibility of each part of the model
 % for each point in the spectrogram.  Summing over tau and i
 % gives a matrix of 1s.  Nu(w, t, i, tau)
@@ -132,10 +103,10 @@ clear lr
 %FIXME
 ildParams = messlIldInit(I, W, sr, Nrep, ildInit, ildStdInit, ...
                     ildPriorPrec*T/100, ildMode, itds, ...
-                    false&dctMode,  garbageSrc, B);
-                    %dctMode,  garbageSrc, B);
+                    false&dctMode,  garbageSrc);
+                    %dctMode,  garbageSrc);
 [spParams C] = messlSpInit(I, W, L, R, sourcePriors, ildStdInit, dctMode, ...
-                      spMode, garbageSrc, B);
+                      spMode, garbageSrc);
                   
 mrfCompatPot = messlMrfLoadCompat(mrfCompatFile, I, garbageSrc);
                   
