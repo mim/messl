@@ -125,19 +125,19 @@ end
 % nuBin = 1/(I*Nt) * ones(W,T, I,Nt);
 
 % Initialize the probability distributions and other parameters
-[ipdParams itds] = messl_initIpd(I, W, Nrep, tau, sr, lr, tauPosInit, pTauIInit, ...
+[ipdParams itds] = messlIpdInit(I, W, Nrep, tau, sr, lr, tauPosInit, pTauIInit, ...
                            sigmaInit, xiInit, ipdMode, xiMode, sigmaMode, ...
                            garbageSrc, vis, fixIPriors);
 clear lr
 %FIXME
-ildParams = messl_initIld(I, W, sr, Nrep, ildInit, ildStdInit, ...
+ildParams = messlIldInit(I, W, sr, Nrep, ildInit, ildStdInit, ...
                     ildPriorPrec*T/100, ildMode, itds, ...
                     false&dctMode,  garbageSrc, B);
                     %dctMode,  garbageSrc, B);
-[spParams C] = messl_initSp(I, W, L, R, sourcePriors, ildStdInit, dctMode, ...
+[spParams C] = messlSpInit(I, W, L, R, sourcePriors, ildStdInit, dctMode, ...
                       spMode, garbageSrc, B);
                   
-mrfCompatPot = messl_loadMrfCompat(mrfCompatFile, I, garbageSrc);
+mrfCompatPot = messlMrfLoadCompat(mrfCompatFile, I, garbageSrc);
                   
 % The rest of the code should act like the garbage source is like
 % any other source, except for the M step, which has to know about
@@ -167,7 +167,7 @@ for rep=1:Nrep
     if spParams.spMode && ~isfield(spParams, 'ev_params')
       maskBin = maskIpd .* maskIld;
       maskBin = maskBin ./ repmat(sum(maskBin,3), [1 1 I]);
-      spParams.sourcePriors(1:I-garbageSrc) = messl_permuteGmms( ...
+      spParams.sourcePriors(1:I-garbageSrc) = messlSpPermuteGmms( ...
           spParams.sourcePriors,  L, R, maskBin, I-garbageSrc);
     end
   end
@@ -176,22 +176,22 @@ for rep=1:Nrep
   %%%% E step: calculate nu matrix
   lpIpd = 0;  lpIld = 0;  lpSp = 0;
   if ipdParams.ipdMode
-    lpIpd = messl_computeIpdLogLikelihood(W,T,I,Nt,C,rep,Nrep, ipdParams, angE);
+    lpIpd = messlIpdLogLikelihood(W,T,I,Nt,C,rep,Nrep, ipdParams, angE);
     if any(~isfinite(lpIpd(:))), warning('IPD liklihood is not finite'); end
   end
   if ildParams.ildMode
-    lpIld = messl_computeIldLogLikelihood(W,T,I,Nt,C,rep,Nrep, ildParams, A);
+    lpIld = messlIldLogLikelihood(W,T,I,Nt,C,rep,Nrep, ildParams, A);
     if any(~isfinite(lpIld(:))), warning('ILD liklihood is not finite'); end
   end
   if spParams.spMode
-    lpSp = messl_computeSpLogLikelihood(W,T,I,Nt,C,rep,Nrep, spParams, ...
+    lpSp = messlSpLogLikelihood(W,T,I,Nt,C,rep,Nrep, spParams, ...
         ildParams, L, R);
     if any(~isfinite(lpSp(:))), warning('SP liklihood is not finite'); end
   end
 
   % Combine binaural and GMM likelihoods and normalize:
   [ll(rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
-      messl_computePosterior(W, T, I, Nt, C, logMaskPrior, ...
+      messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
       ipdParams, lpIpd, ildParams, lpIld, spParams, lpSp, ...
       vis || rep == Nrep, reliability, ...
       mrfCompatPot, mrfCompatExpSched(min(end,rep)));
@@ -205,23 +205,23 @@ for rep=1:Nrep
 
   
   %%%% M step: use nu matrix to calcuate parameters
-  nuIpd = messl_enforceIPriors(nuIpd, ipdParams);
+  nuIpd = messlIpdEnforcePriors(nuIpd, ipdParams);
       
   if ipdParams.ipdMode
-    ipdParams = messl_updateIpdParams(W, T, I, Nt, C, rep, ipdParams, ...
+    ipdParams = messlIpdUpdateParams(W, T, I, Nt, C, rep, ipdParams, ...
                                 nuIpd, angE);
   end
   if ildParams.ildMode
-    ildParams = messl_updateIldParams(W, T, I, Nt, C, rep, ildParams, nuIld, ...
+    ildParams = messlIldUpdateParams(W, T, I, Nt, C, rep, ildParams, nuIld, ...
         A, Nrep);
   end
   if spParams.spMode
-    spParams = messl_updateSpParams(W, T, I, Nt, C, rep, spParams, nuSp, ...
+    spParams = messlSpUpdateParams(W, T, I, Nt, C, rep, spParams, nuSp, ...
         L, R, Nrep);
   end
   
   if vis
-    messl_visualizeParams(W, T, I, tau, sr, ipdParams, ildParams, spParams, ...
+    messlUtilVisualizeParams(W, T, I, tau, sr, ipdParams, ildParams, spParams, ...
         p_lr_iwt, maskIpd, maskIld, maskSp, L, R, reliability);
   end
 end
@@ -235,7 +235,7 @@ params = struct('p_tauI', ipdParams.p_tauI, ...
 
 % Compute hard masks, potentially using the MRF model
 mrfLbpIter = 8;
-[~,~,~,hardSrcs] = messl_applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfHardCompatExp, mrfLbpIter, 'max');
+[~,~,~,hardSrcs] = messlMrfApply(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfHardCompatExp, mrfLbpIter, 'max');
 hardMasks = zeros(size(p_lr_iwt));
 for i = 1:max(hardSrcs(:))
     hardMasks(:,:,:,i) = repmat(permute(hardSrcs == i, [3 1 2]), [2 1 1]);
@@ -245,7 +245,7 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % IPD functions
 function [ipdParams, itds] = ...
-    messl_initIpd(I, W, Nrep, tau, sr, lr, tauPosInit, pTauIInit, sigmaInit, ...
+    messlIpdInit(I, W, Nrep, tau, sr, lr, tauPosInit, pTauIInit, sigmaInit, ...
             xiInit, ipdMode, xiMode, sigmaMode, garbageSrc, vis, fixIPriors)
 % Initialize p(tau | i) with smooth peaks centered on the peaks of
 % the cross-correlation, or at locations specified by the user.
@@ -338,7 +338,7 @@ ipdParams = struct('p_tauI', pTauI, 'xi_wit', xi_wit, 's2_wit', ...
     'garbageSrc', garbageSrc, 'fixIPriors', fixIPriors);
 
 
-function lpBin = messl_computeIpdLogLikelihood(W, T, I, Nt, C, rep, ...
+function lpBin = messlIpdLogLikelihood(W, T, I, Nt, C, rep, ...
     Nrep, ipdParams, angE)
 
 % Erep is a 5th order tensor with size [W T I Nt] and dimensions
@@ -352,7 +352,7 @@ lpt = repmat(permute(single(log(ipdParams.p_tauI)), [3 4 1 2]), [W T 1 1]);
 lpBin = lpBin + lpt;
 
 
-function ipdParams = messl_updateIpdParams(W, T, I, Nt, C, rep, ipdParams, ...
+function ipdParams = messlIpdUpdateParams(W, T, I, Nt, C, rep, ipdParams, ...
     nuIpd, angE);
 
 % Erep is a 5th order tensor with size [W T I Nt] and dimensions
@@ -368,7 +368,7 @@ nuSum2 = permute(sum(nuIpd, 2), [1 4 3 2]);
 nonzero = 1e-12;
 % Compute the IPD means as regular gaussian means, not circular
 if ipdParams.xiMode
-  xiAvg = messl_makeMuAvg(W, ipdParams.xiBands(rep));
+  xiAvg = messlUtilMakeMuAvg(W, ipdParams.xiBands(rep));
   ErepNuSum2 = permute(sum(nuIpd .* Erep,2), [1 4 3 2]);
   for i=1:I
     ipdParams.xi_wit(:,i,:) = (xiAvg * ErepNuSum2(:,:,i) + nonzero) ./ ...
@@ -392,7 +392,7 @@ end
 if ipdParams.sigmaMode
   oldS2 = ipdParams.s2_wit;
 
-  sAvg = messl_makeMuAvg(W, ipdParams.sigmaBands(rep));
+  sAvg = messlUtilMakeMuAvg(W, ipdParams.sigmaBands(rep));
   weightedDiffSum2 = permute(weightedDiffSum2, [1 4 3 2]);
 
   for i=1:I
@@ -419,9 +419,9 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % ILD functions
-function ildParams = messl_initIld(I, W, sr, Nrep, ildInit, ildStdInit, ...
+function ildParams = messlIldInit(I, W, sr, Nrep, ildInit, ildStdInit, ...
                              priorPrec, ildMode, itds, dctMode, ...
-                             garbageSrc, B);
+                             garbageSrc, B)
 ildParams = struct('ildMode', ildMode, 'dctMode', dctMode, ...
     'garbageSrc', garbageSrc, 'B', B);
 
@@ -487,7 +487,7 @@ if dctMode
 end
 
 
-function lpIld = messl_computeIldLogLikelihood(W,T,I,Nt,C,rep,Nrep, ildParams, A)
+function lpIld = messlIldLogLikelihood(W,T,I,Nt,C,rep,Nrep, ildParams, A)
 lpIld = single(zeros(W,T,I));
 for i=1:I
   h2 = repmat(ildParams.h2_wi(:,i), 1, T);
@@ -496,7 +496,7 @@ for i=1:I
 end
 
 
-function ildParams = messl_updateIldParams(W, T, I, Nt, C, rep, ildParams, ...
+function ildParams = messlIldUpdateParams(W, T, I, Nt, C, rep, ildParams, ...
     nuIld, A, Nrep)
 % Compute the ILD terms
 if ~ildParams.dctMode
@@ -506,7 +506,7 @@ if ~ildParams.dctMode
 %     return
 %   end
 
-  muAvg = messl_makeMuAvg(W, ildParams.ildBands(rep));
+  muAvg = messlUtilMakeMuAvg(W, ildParams.ildBands(rep));
   h2Avg = muAvg;
 
   % Update means, including prior
@@ -554,7 +554,7 @@ else
   ildParams.mu_wi = real(ildParams.B * ildParams.zeta_di);
 
   % default to contant variance across frequency
-  h2Avg = messl_makeMuAvg(W, 1);
+  h2Avg = messlUtilMakeMuAvg(W, 1);
   for i=1:I
     ildParams.h2_wi(:,i) = ...
         sum(nuIld(:,:,i) .* (A-repmat(ildParams.mu_wi(:,i),1,T)).^2, 2);
@@ -614,7 +614,7 @@ else
 end
 
 
-function muAvg = messl_makeMuAvg(W, bands)
+function muAvg = messlUtilMakeMuAvg(W, bands)
 % Make a matrix that will average the bands of mu_wi when it
 % multiplies it.  W is the number of frequencies.  If bands is a
 % scalar it specifies the number of bands, if it's a vector it
@@ -634,7 +634,7 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % SP functions
-function [spParams C] = messl_initSp(I, W, L, R, sourcePriors, stdInit, ...
+function [spParams C] = messlSpInit(I, W, L, R, sourcePriors, stdInit, ...
     dctMode, spMode, garbageSrc, B)
 spParams = struct('spMode', spMode, 'dctMode', dctMode, ...
     'garbageSrc', garbageSrc, 'B', B);
@@ -718,7 +718,7 @@ if spMode
 end
 
 
-function pgmm = messl_computeSpLogLikelihood(W,T,I,Nt,C,rep,Nrep, spParams, ...
+function pgmm = messlSpLogLikelihood(W,T,I,Nt,C,rep,Nrep, spParams, ...
     ildParams, L, R)
 % Compute the likelihood of each time frequency cell of the left and
 % right channels under each component of the given GMMs.
@@ -784,7 +784,7 @@ pgmm(:,1:32,:,:,:) = 0;
 
 
 
-function gmms = messl_permuteGmms(gmms, L, R, bin_mask, I)
+function gmms = messlSpPermuteGmms(gmms, L, R, bin_mask, I)
 % Fix arbitrary permutations in the ordering of gmms so it agrees
 % with bin_mask.
 
@@ -826,7 +826,7 @@ end
 gmms = gmms(idx);
 
 
-function channel_response = messl_channelAdaptGmms(initial_gmm, obs, p_wtc, B)
+function channel_response = messlSpChannelAdaptGmms(initial_gmm, obs, p_wtc, B)
 % Update left and right channel responses for each source GMM.
 % Returns the updated GMM structure and the magnitude response of the
 % channel.
@@ -855,7 +855,7 @@ channel_response = B*chan;
 
 
 
-function [w hl hr] = messl_eigenvoiceAndChannelAdaptGmms(spParams, L, R, p_lr_wtc)
+function [w hl hr] = messlSpEigenvoiceAndChannelAdaptGmms(spParams, L, R, p_lr_wtc)
 [W T] = size(L);
 C = size(spParams.ev_params.mean, 2);
 ndct = size(spParams.B, 2);
@@ -916,14 +916,14 @@ hr = tmp(nev+ndct+[1:ndct]);
 
 
 
-function spParams = messl_updateSpParams(W, T, I, Nt, C, rep, spParams, ...
+function spParams = messlSpUpdateParams(W, T, I, Nt, C, rep, spParams, ...
     nuSp, L, R, Nrep);
 for i = 1:I
   if spParams.garbageSrc && i == I
     continue
   elseif spParams.spMode > 0
     if isfield(spParams, 'ev_params')
-      [w hl hr] = messl_eigenvoiceAndChannelAdaptGmms(spParams, L, R, ...
+      [w hl hr] = messlSpEigenvoiceAndChannelAdaptGmms(spParams, L, R, ...
           squeeze(nuSp(:,:,:,i,:)));
       spParams.w(i,:) = w;
       spParams.hl(i,:) = hl;
@@ -933,9 +933,9 @@ for i = 1:I
       spParams.sourcePriors(i) = ...
           construct_adapted_model(spParams.gmm, spParams.ev_params, w);
     else
-      spParams.channel_response(1,i,:) = messl_channelAdaptGmms( ...
+      spParams.channel_response(1,i,:) = messlSpChannelAdaptGmms( ...
 	  spParams.sourcePriors(i), L, squeeze(nuSp(1,:,:,i,:)), spParams.B);
-      spParams.channel_response(2,i,:) = messl_channelAdaptGmms(  ...
+      spParams.channel_response(2,i,:) = messlSpChannelAdaptGmms(  ...
 	  spParams.sourcePriors(i), R, squeeze(nuSp(2,:,:,i,:)), spParams.B);
     end
   elseif spParams.spMode < 0
@@ -994,7 +994,7 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % MRF Functions
-function mrfCompatPot = messl_loadMrfCompat(mrfCompatFile, I, garbageSrc)
+function mrfCompatPot = messlMrfLoadCompat(mrfCompatFile, I, garbageSrc)
 % Hard coded for 2 sources and a garbage source for now...
 
 if isempty(mrfCompatFile) || ~exist(mrfCompatFile, 'file') % || (I ~= 2)
@@ -1008,7 +1008,7 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function [ll p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
-    messl_computePosterior(W, T, I, Nt, C, logMaskPrior, ...
+    messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
     ipdParams, lpIpd, ildParams, lpIld, spParams, lpSp, vis, reliability, ...
     mrfCompatPot, mrfCompatExp)
 % Defaults
@@ -1144,7 +1144,7 @@ else
   end
 end
 
-[p_lr_iwt nuIld nuIpd] = messl_applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExp, mrfLbpIter, 'sum');
+[p_lr_iwt nuIld nuIpd] = messlMrfApply(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExp, mrfLbpIter, 'sum');
 
 if ~isempty(reliability)
   nuIpd = nuIpd .* repmat(reliability, [1 1 I Nt]);
@@ -1153,7 +1153,7 @@ if ~isempty(reliability)
 end
 
 
-function [p_lr_iwt nuIld nuIpd hardSrcs] = messl_applyMrf(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExp, mrfLbpIter, bpType, doPlot)
+function [p_lr_iwt nuIld nuIpd hardSrcs] = messlMrfApply(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfCompatExp, mrfLbpIter, bpType, doPlot)
 if ~exist('doPlot', 'var') || isempty(doPlot), doPlot = 0; end
 
 if ~isempty(mrfCompatPot) && (mrfCompatExp ~= 0)
@@ -1166,7 +1166,7 @@ else
 end
 
 
-function nuIpd = messl_enforceIPriors(nuIpd, ipdParams)
+function nuIpd = messlIpdEnforcePriors(nuIpd, ipdParams)
 if ipdParams.fixIPriors
     newSrcPriors = mean(mean(sum(nuIpd, 4), 1), 2);
     rescaling = permute(sum(ipdParams.p_tauI, 2), [2 3 1]) ./ newSrcPriors;
@@ -1175,7 +1175,7 @@ if ipdParams.fixIPriors
 end
 
 
-function messl_visualizeParams(W, T, I, tau, sr, ipdParams, ildParams, spParams, ...
+function messlUtilVisualizeParams(W, T, I, tau, sr, ipdParams, ildParams, spParams, ...
     p_lr_iwt, maskIpd, maskIld, maskSp, L, R, reliability)
 %%%% Visualize what's happening
 % 4 figures:
