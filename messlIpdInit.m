@@ -71,7 +71,7 @@ else
     end
   end
 
-  if garbageSrc, sigma(I+garbageSrc) = max(abs(tau(i,:)))/.02; end
+  if garbageSrc, sigma(I+garbageSrc) = max(abs(tau(I+garbageSrc,:)))/.02; end
 
   % Put Gaussians at the specified locations
   mu = tauPosInit;

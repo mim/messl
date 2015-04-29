@@ -103,7 +103,7 @@ end
 % symmetrized KL divergence to reference (first mic pair). 
 % TODO: find best reference mic pair.
 targetMasks = masks(:,:,:,1);
-allOrds = perms(1:size(masks,3));
+allOrds = perms(1:size(targetMasks,3));
 for c = 1:size(masks,4)
     for oi = 1:size(allOrds,1)
         permMasks = masks(:,:,allOrds(oi,:),c);
@@ -113,6 +113,9 @@ for c = 1:size(masks,4)
     pTauIInit(:,:,c) = params.p_tauI(allOrds(oi,:),:);
 end
 
+% % Hard-coded for test example...
+%tauPosInit = [-23; 0; 22];
+
 % Start actual Multi-channel MESSL using those alignments.  Re-initialize
 % parameters.
 for c = 1:size(channelPairs,1)
@@ -120,16 +123,16 @@ for c = 1:size(channelPairs,1)
     [~,~,~,W,T,~,L,R] = messlObsDerive(x(cp,:), tau, nfft);
     
     % Initialize the probability distributions and other parameters
-    [ipdParams itds] = messlIpdInit(I, W, Nrep, tau, sr, x, tauPosInit, pTauIInit(:,:,c), ...
+    [ipdParams(c) itds] = messlIpdInit(I, W, Nrep, tau, sr, x, tauPosInit, pTauIInit(:,:,c), ...
         sigmaInit, xiInit, ipdMode, xiMode, sigmaMode, ...
         garbageSrc, vis, fixIPriors);
     clear lr
     %FIXME
-    ildParams = messlIldInit(I, W, sr, Nrep, ildInit, ildStdInit, ...
+    ildParams(c) = messlIldInit(I, W, sr, Nrep, ildInit, ildStdInit, ...
         ildPriorPrec*T/100, ildMode, itds, ...
         false&dctMode,  garbageSrc);
     %dctMode,  garbageSrc);
-    [spParams C] = messlSpInit(I, W, L, R, sourcePriors, ildStdInit, dctMode, ...
+    [spParams(c) C] = messlSpInit(I, W, L, R, sourcePriors, ildStdInit, dctMode, ...
         spMode, garbageSrc);
 end               
 
@@ -191,8 +194,6 @@ for rep=1:Nrep
                 if any(~isfinite(lpSp(:))), warning('SP liklihood is not finite'); end
             end
             
-            logCombinedMaskPrior = logMaskPrior + useCombinedPost*logMultichannelPosterior;
-            
             % Combine binaural and GMM likelihoods and normalize:
             [ll(c,rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
                 messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
@@ -216,47 +217,43 @@ for rep=1:Nrep
                     ipdParams(c).ipdMode, lpIpd, ildParams(c).ildMode, lpIld, ...
                     spParams(c).spMode, lpSp, vis || rep == Nrep, reliability, ...
                     mrfCompatPot, mrfCompatExpSched(min(end,rep)));
+                clear lp*
+
+                % ll should be non-decreasing
+                fprintf('ll(%02d,%02d) = %e\n', rep, c, ll(c,rep));
+                
                 if (rep >= maskHold)
                     logMaskPrior = 0;
                 end
+                
+                %%%% M step: use nu matrix to calcuate parameters
+                nuIpd = messlIpdEnforcePriors(nuIpd, ipdParams(c));
+                
+                if ipdParams(c).ipdMode
+                    ipdParams(c) = messlIpdUpdateParams(W, T, I, Nt, C, rep, ipdParams(c), ...
+                        nuIpd, angE);
+                end
+                if ildParams(c).ildMode
+                    ildParams(c) = messlIldUpdateParams(W, T, I, Nt, C, rep, ildParams(c), nuIld, ...
+                        A, Nrep);
+                end
+                if spParams(c).spMode
+                    spParams(c) = messlSpUpdateParams(W, T, I, Nt, C, rep, spParams(c), nuSp, ...
+                        L, R, Nrep);
+                end
             end
-            clear lp*
-
-            % ll should be non-decreasing
-            fprintf('ll(%02d,%02d) = %e\n', rep, c, ll(c,rep));
         end
     end
+    subplots(cellFrom3D(logMultichannelPosterior), [], [], @(r,c,i) caxis([-10 0]))
+    drawnow
     
-    for c = 1:size(channelPairs,1)
-        %%%% M step: use nu matrix to calcuate parameters
-        nuIpd = messlIpdEnforcePriors(nuIpd, ipdParams(c));
-        
-        if ipdParams(c).ipdMode
-            ipdParams(c) = messlIpdUpdateParams(W, T, I, Nt, C, rep, ipdParams(c), ...
-                nuIpd, angE);
-        end
-        if ildParams(c).ildMode
-            ildParams(c) = messlIldUpdateParams(W, T, I, Nt, C, rep, ildParams(c), nuIld, ...
-                A, Nrep);
-        end
-        if spParams(c).spMode
-            spParams(c) = messlSpUpdateParams(W, T, I, Nt, C, rep, spParams(c), nuSp, ...
-                L, R, Nrep);
-        end
-        
-        if vis
-            messlUtilVisualizeParams(W, T, I, tau, sr, ipdParams(c), ildParams(c), spParams(c), ...
-                p_lr_iwt, maskIpd, maskIld, maskSp, L, R, reliability);
-        end
+    if vis
+        messlUtilVisualizeParams(W, T, I, tau, sr, ipdParams(c), ildParams(c), spParams(c), ...
+            p_lr_iwt, maskIpd, maskIld, maskSp, L, R, reliability);
     end
 end
 
-params = struct('p_tauI', ipdParams.p_tauI, ...
-    'xi_wit', ipdParams.xi_wit, 's_wit', sqrt(ipdParams.s2_wit), ...
-    'mu_wi', ildParams.mu_wi, 'h_wi', sqrt(ildParams.h2_wi), ...
-    'ipdParams', ipdParams, 'maskIpd', maskIpd, ...
-    'ildParams', ildParams, 'maskIld', maskIld, ...
-    'spParams', spParams, 'maskSp', maskSp);
+params = struct('ipdParams', ipdParams, 'ildParams', ildParams, 'spParams', spParams);
 
 % Compute hard masks, potentially using the MRF model
 mrfLbpIter = 8;
