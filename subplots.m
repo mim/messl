@@ -37,7 +37,13 @@ if isempty(names)
     names = cellfun(@(x) num2str(x), num2cell(1:nPlots), 'UniformOutput', false);
 end
 
-clf
+try
+    clf
+catch ex
+    % No display
+    return
+end
+
 for i = 1:nPlots
     subplot(nRows, nCols, i);
     x = data{i};
