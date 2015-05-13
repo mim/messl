@@ -1,12 +1,12 @@
-function [p_lr_iwt params hardMasks] = messlMultichannel(x, tau, I, varargin)
+function [p_lr_iwt params hardMasks] = messlMultichannel(X, tau, I, varargin)
 
-% [p_lr_iwt params hardMasks] = messlMultichannel(x, tau, I, [name1, value1] ...)
+% [p_lr_iwt params hardMasks] = messlMultichannel(X, tau, I, [name1, value1] ...)
 %
 % Perform MESSL algorithm (including ILD, frequency-dependent ITD,
 % source prior GMMs) on a multichannel mixture of I spatially separated
 % sources.
 %
-% X is the multichannel mixture in the time domain, a CxN matrix.  TAU is
+% X is the multichannel mixture in the frequency domain, an FxTxC matrix.  TAU is
 % the grid of times over which to evaluate the probability of the
 % various samples.  The three "mode" options behave in similar
 % ways, but control different variables.  A mode of 0 indicates
@@ -88,31 +88,34 @@ if spMode && isempty(sourcePriors)
   warning('spMode set to 1, but ''sourcePriors'' option was not set.');
 end
 
-Ch = size(x, 1);
+Ch = size(X, 3);
 channelPairs = nchoosek(1:Ch, 2);
 
-% Run messl on each pair for several iterations to initialize parameters
-for c = 1:size(channelPairs,1)
-    cp = channelPairs(c,:);
-    [p_lr_iwt params] = messl(x(cp,:), tau, I, varargin{:}, 'Nrep', 4);
-    masks(:,:,:,c) = squeeze(p_lr_iwt(1,:,:,:));
-end
-
-% Permute sources to match across mic pairs.  Treat each TF point as a
-% multinomial RV across sources, find permutation with minimum total
-% symmetrized KL divergence to reference (first mic pair). 
-% TODO: find best reference mic pair.
-targetMasks = masks(:,:,:,1);
-allOrds = perms(1:size(targetMasks,3));
-for c = 1:size(masks,4)
-    for oi = 1:size(allOrds,1)
-        permMasks = masks(:,:,allOrds(oi,:),c);
-        kldiv(oi) = (targetMasks(:) - permMasks(:))' * log(targetMasks(:) ./ permMasks(:));
+if isempty(maskInit)
+    % Run messl on each pair for several iterations to initialize parameters
+    for c = 1:size(channelPairs,1)
+        cp = channelPairs(c,:);
+        [p_lr_iwt params] = messl(X(:,:,cp), tau, I, varargin{:}, 'Nrep', 4, 'modes', [1 1 0 1 1 0]);
+        masks(:,:,:,c) = squeeze(p_lr_iwt(1,:,:,:));
     end
-    [~,oi] = min(kldiv);
-    pTauIInit(:,:,c) = params.p_tauI(allOrds(oi,:),:);
+    
+    % Permute sources to match across mic pairs.  Treat each TF point as a
+    % multinomial RV across sources, find permutation with minimum total
+    % symmetrized KL divergence to reference (first mic pair).
+    % TODO: find best reference mic pair.
+    targetMasks = masks(:,:,:,1);
+    allOrds = perms(1:size(targetMasks,3));
+    for c = 1:size(masks,4)
+        for oi = 1:size(allOrds,1)
+            permMasks = masks(:,:,allOrds(oi,:),c);
+            kldiv(oi) = (targetMasks(:) - permMasks(:))' * log(targetMasks(:) ./ permMasks(:));
+        end
+        [~,oi] = min(kldiv);
+        pTauIInit(:,:,c) = params.p_tauI(allOrds(oi,:),:);
+    end
+else
+    pTauIInit = ones(I+garbageSrc,length(tau),size(channelPairs,1));
 end
-
 % % Hard-coded for test example...
 %tauPosInit = [-23; 0; 22];
 
@@ -120,10 +123,10 @@ end
 % parameters.
 for c = 1:size(channelPairs,1)
     cp = channelPairs(c,:);
-    [~,~,~,W,T,~,L,R] = messlObsDerive(x(cp,:), tau, nfft);
+    [~,~,~,W,T,~,L,R] = messlObsDerive(X(:,:,cp), tau, nfft);
     
     % Initialize the probability distributions and other parameters
-    [ipdParams(c) itds] = messlIpdInit(I, W, Nrep, tau, sr, x, tauPosInit, pTauIInit(:,:,c), ...
+    [ipdParams(c) itds] = messlIpdInit(I, W, Nrep, tau, sr, X, tauPosInit, pTauIInit(:,:,c), ...
         sigmaInit, xiInit, ipdMode, xiMode, sigmaMode, ...
         garbageSrc, vis, fixIPriors);
     clear lr
@@ -158,7 +161,7 @@ for rep=1:Nrep
     for useCombinedPost = [0 1]
         for c = 1:size(channelPairs,1)
             cp = channelPairs(c,:);
-            [A,angE,~,W,T,Nt,L,R] = messlObsDerive(x(cp,:), tau, nfft);
+            [A,angE,~,W,T,Nt,L,R] = messlObsDerive(X(:,:,cp), tau, nfft);
             
             clear nu*
             
