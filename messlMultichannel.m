@@ -137,7 +137,7 @@ for c = 1:size(channelPairs,1)
     %dctMode,  garbageSrc);
     [spParams(c) C] = messlSpInit(I, W, L, R, sourcePriors, ildStdInit, dctMode, ...
         spMode, garbageSrc);
-end               
+end
 
 mrfCompatPot = messlMrfLoadCompat(mrfCompatFile, I, garbageSrc);
                   
@@ -214,7 +214,8 @@ for rep=1:Nrep
                 % calculation.
                 
                 % Combine binaural and GMM likelihoods and normalize:
-                logCombinedMask = logMaskPrior + logMultichannelPosterior - single(log(squeeze(p_lr_iwt(1,:,:,:))));
+                overcountRescale = Ch / (size(channelPairs,1) - 1);
+                logCombinedMask = logMaskPrior + overcountRescale * (logMultichannelPosterior - single(log(squeeze(p_lr_iwt(1,:,:,:)))));
                 [ll(c,rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
                     messlPosterior(W, T, I, Nt, C, logCombinedMask, ...
                     ipdParams(c).ipdMode, lpIpd, ildParams(c).ildMode, lpIld, ...
