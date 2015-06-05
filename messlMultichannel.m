@@ -101,10 +101,11 @@ else
     channelPairs = nchoosek(1:Ch, 2);
     overcountRescale = Ch / (size(channelPairs,1) - 1);
 end
+Np = size(channelPairs,1);
 
 if isempty(maskInit)
     % Run messl on each pair for several iterations to initialize parameters
-    for c = 1:size(channelPairs,1)
+    for c = 1:Np
         cp = channelPairs(c,:);
         [p_lr_iwt params] = messl(X(:,:,cp), tau, I, varargin{:}, 'Nrep', 4, 'modes', [1 1 0 1 1 0]);
         masks(:,:,:,c) = squeeze(p_lr_iwt(1,:,:,:));
@@ -125,14 +126,14 @@ if isempty(maskInit)
         pTauIInit(:,:,c) = params.p_tauI(allOrds(oi,:),:);
     end
 else
-    pTauIInit = ones(I+garbageSrc,length(tau),size(channelPairs,1));
+    pTauIInit = ones(I+garbageSrc,length(tau),Np);
 end
 % % Hard-coded for test example...
 %tauPosInit = [-23; 0; 22];
 
 % Start actual Multi-channel MESSL using those alignments.  Re-initialize
 % parameters.
-for c = 1:size(channelPairs,1)
+for c = 1:Np
     cp = channelPairs(c,:);
     [~,~,~,W,T,~,L,R] = messlObsDerive(X(:,:,cp), tau, nfft);
     
@@ -166,11 +167,12 @@ end
 % Keep track of the total log likelihood
 ll = [];
 
+logMultichannelPosteriors = zeros(W, T, I, Np);
+
 % Start EM
 for rep=1:Nrep
-    logMultichannelPosterior = 0;
     for useCombinedPost = [0 1]
-        for c = 1:size(channelPairs,1)
+        for c = 1:Np
             cp = channelPairs(c,:);
             [A,angE,~,W,T,Nt,L,R] = messlObsDerive(X(:,:,cp), tau, nfft);
             
@@ -208,24 +210,23 @@ for rep=1:Nrep
                 if any(~isfinite(lpSp(:))), warning('SP liklihood is not finite'); end
             end
             
-            % Combine binaural and GMM likelihoods and normalize:
-            [ll(c,rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
-                messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
-                ipdParams(c).ipdMode, lpIpd, ildParams(c).ildMode, lpIld, ...
-                spParams(c).spMode, lpSp, vis || rep == Nrep, reliability, ...
-                mrfCompatPot, mrfCompatExpSched(min(end,rep)), mrfLbpIter);
-            
             if useCombinedPost == 0
-                % Accumulate multi-channel posterior
-                logMultichannelPosterior = logMultichannelPosterior + ...
-                    single(log(squeeze(p_lr_iwt(1,:,:,:))));
+                % Combine binaural and GMM likelihoods and normalize:
+                [ll(c,rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
+                    messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
+                    ipdParams(c).ipdMode, lpIpd, ildParams(c).ildMode, lpIld, ...
+                    spParams(c).spMode, lpSp, vis || rep == Nrep, reliability, ...
+                    mrfCompatPot, mrfCompatExpSched(min(end,rep)), mrfLbpIter);
+
+                logMultichannelPosteriors(:,:,:,c) = single(log(squeeze(p_lr_iwt(1,:,:,:))));
             else
                 % Subtract posteriors for current mic pair from
                 % multi-channel posterior, use as "prior" for final mask
                 % calculation.
-                
+                logCombinedMask = logMaskPrior + overcountRescale * ...
+                    sum(logMultichannelPosteriors(:,:,:,setdiff(1:Np,c)), 4);
+
                 % Combine binaural and GMM likelihoods and normalize:
-                logCombinedMask = logMaskPrior + overcountRescale * (logMultichannelPosterior - single(log(squeeze(p_lr_iwt(1,:,:,:)))));
                 [ll(c,rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
                     messlPosterior(W, T, I, Nt, C, logCombinedMask, ...
                     ipdParams(c).ipdMode, lpIpd, ildParams(c).ildMode, lpIld, ...
@@ -258,7 +259,8 @@ for rep=1:Nrep
             end
         end
     end
-    subplots(cellFrom3D(logMultichannelPosterior), [], [], @(r,c,i) caxis([-10 0]))
+    
+    subplots(cellFrom3D(sum(logMultichannelPosteriors,4)), [], [], @(r,c,i) caxis([-10 0]))
     drawnow
     
     if vis

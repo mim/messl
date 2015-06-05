@@ -1,4 +1,4 @@
-function [ll p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
+function [ll p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp likeIwt] = ...
     messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
     ipdMode, lpIpd, ildMode, lpIld, spMode, lpSp, vis, reliability, ...
     mrfCompatPot, mrfCompatExp, mrfLbpIter)
@@ -50,6 +50,8 @@ pBin = approxExp(pBin) + eps;
 %   threshold = quantile(pBin(:), 0);
 
 if any(pBin(:) <= 0), warning('pBin <= 0'), end
+
+likeIwt = sum(pBin, 4);
 
 if ~spMode
   norm = sum(sum(pBin,3),4);
