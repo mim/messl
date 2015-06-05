@@ -7,7 +7,7 @@ nuIpd = single(lpIpd); maskIpd = 0;
 nuIld = single(lpIld); maskIld = 0;
 nuSp  = single(lpSp);  maskSp  = 0;
 
-if vis || ~spMode
+if vis % || ~spMode
   % Normalize each term separated to demonstrate the contribution of
   % each component to the overall posterior mask.
   if ipdMode
