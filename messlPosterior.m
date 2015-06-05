@@ -11,7 +11,7 @@ if vis || ~spMode
   % Normalize each term separated to demonstrate the contribution of
   % each component to the overall posterior mask.
   if ipdMode
-    maskIpd = sum(exp(lpIpd), 4);
+    maskIpd = sum(approxExp(lpIpd), 4);
     maskIpd = maskIpd ./ repmat(sum(maskIpd,3), [1 1 I]);
   end
   if ildMode
@@ -44,7 +44,7 @@ clear lpIld
 %   ls = linspace(-30,0,1000);
 %   figure(5), bar(ls, histc(pBin(:), ls)); drawnow
 
-pBin = exp(pBin) + eps;
+pBin = approxExp(pBin) + eps;
 
 %   % Only use high relative probability points
 %   threshold = quantile(pBin(:), 0);
@@ -139,4 +139,20 @@ if ~isempty(reliability)
   nuIpd = nuIpd .* repmat(reliability, [1 1 I Nt]);
   nuIld = nuIld .* repmat(reliability, [1 1 I]);
   nuSp  = nuSp  .* repmat(permute(reliability, [3 1 2]), [2 1 1 I C]);
+end
+
+
+function Y = approxExp(X, thresh)
+if nargin < 2, thresh = log(eps); end
+
+Y = exp(X);
+return
+
+keep = X > thresh;
+if mean(keep(:)) > 0.05  % seems to need about 5% non-zero sparsity for this to be worth it.
+    Y = exp(X);
+else
+    % Only compute exp on large-enough entries
+    Y = zeros(size(X), 'single');
+    Y(keep) = exp(X(keep));
 end
