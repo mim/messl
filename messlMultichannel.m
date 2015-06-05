@@ -167,7 +167,7 @@ end
 % Keep track of the total log likelihood
 ll = [];
 
-logMultichannelPosteriors = zeros(W, T, I, Np);
+likeIwtc = zeros(W, T, I, Np);
 
 % Start EM
 for rep=1:Nrep
@@ -212,20 +212,17 @@ for rep=1:Nrep
             
             if useCombinedPost == 0
                 % Combine binaural and GMM likelihoods and normalize:
-                [ll(c,rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
+                [ll(c,rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp likeIwtc(:,:,:,c)] = ...
                     messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
                     ipdParams(c).ipdMode, lpIpd, ildParams(c).ildMode, lpIld, ...
                     spParams(c).spMode, lpSp, vis || rep == Nrep, reliability, ...
                     mrfCompatPot, mrfCompatExpSched(min(end,rep)), mrfLbpIter);
-
-                logMultichannelPosteriors(:,:,:,c) = single(log(squeeze(p_lr_iwt(1,:,:,:))));
             else
-                % Subtract posteriors for current mic pair from
-                % multi-channel posterior, use as "prior" for final mask
-                % calculation.
+                % Compute "prior" mask for this mic pair, no need to
+                % normalize because it will be normalized in the posterior
                 logCombinedMask = logMaskPrior + overcountRescale * ...
-                    sum(logMultichannelPosteriors(:,:,:,setdiff(1:Np,c)), 4);
-
+                    sum(logPostIwtc(:,:,:,setdiff(1:Np,c)), 4);
+                
                 % Combine binaural and GMM likelihoods and normalize:
                 [ll(c,rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
                     messlPosterior(W, T, I, Nt, C, logCombinedMask, ...
@@ -258,10 +255,16 @@ for rep=1:Nrep
                 end
             end
         end
+        
+        if useCombinedPost == 0
+            norm = sum(sum(likeIwtc, 3), 4);
+            logPostIwtc = log(bsxfun(@rdivide, likeIwtc, norm));
+        end
     end
     
-    subplots(cellFrom3D(sum(logMultichannelPosteriors,4)), [], [], @(r,c,i) caxis([-10 0]))
+    subplots(cellFrom3D(sum(logPostIwtc,4)), [], [], @(r,c,i) caxis([-10 0]))
     drawnow
+    clear logPostIwtc
     
     if vis
         messlUtilVisualizeParams(W, T, I, tau, sr, ipdParams(c), ildParams(c), spParams(c), ...
