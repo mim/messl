@@ -21,6 +21,9 @@ function [p_lr_iwt params hardMasks] = messlMultichannel(X, tau, I, varargin)
 % 
 % Valid named arguments are:
 %
+% ::Multichannel::
+% refMic          (0) reference mic if positive (N-1 pairs), otherwise use all N*(N-1)/2 pairs
+%
 % ::Initialization::
 % tauPosInit     ([]) init source pos's (in samples), otherwise from xcorr
 % pTauIInit      ([]) initial p(tau|i) distributions, gaussians
@@ -53,6 +56,7 @@ function [p_lr_iwt params hardMasks] = messlMultichannel(X, tau, I, varargin)
 %                     for use in parameter estimation
 % ildPriorPrec    (0) precision (inverse variance) of ILD prior
 % sr          (16000) sampling rate, only used by ILD prior
+% mrfLbpIter      (8) number of iterations for MRF loopy belief propagation
 %
 % ::Nuts and bolts::
 % vis             (0) plot informational displays
@@ -63,7 +67,7 @@ function [p_lr_iwt params hardMasks] = messlMultichannel(X, tau, I, varargin)
  ipdMode, ildMode, xiMode, sigmaMode, dctMode, spMode, nfft, ...
  vis, Nrep, modes, sigmaInit, xiInit, sourcePriors, maskHold, ...
  reliability, ildPriorPrec, sr, mrfHardCompatExp, mrfCompatFile ...
- mrfCompatExpSched fixIPriors] = ...
+ mrfCompatExpSched fixIPriors refMic mrfLbpIter] = ...
     process_options(varargin, 'tauPosInit', [], 'pTauIInit', [], ...
     'ildInit', 0, 'ildStdInit', 10, 'maskInit', [], ...
     'garbageSrc', 0, 'ipdMode', 1, 'ildMode', -1, 'xiMode', -1, ...
@@ -72,7 +76,7 @@ function [p_lr_iwt params hardMasks] = messlMultichannel(X, tau, I, varargin)
     'sourcePriors', [], 'maskHold', 0, 'reliability', [], ...
     'ildPriorPrec', 0, 'sr', 16000, 'mrfHardCompatExp', 0, ...
     'mrfCompatFile', '', 'mrfCompatExpSched', [0 0 0 0 .02 .02 .02 .02 .05], ...
-    'fixIPriors', 0);
+    'fixIPriors', 0, 'refMic', 0, 'mrfLbpIter', 8);
 
 if ~isempty(modes)
   ipdMode   = modes(1);
@@ -89,7 +93,14 @@ if spMode && isempty(sourcePriors)
 end
 
 Ch = size(X, 3);
-channelPairs = nchoosek(1:Ch, 2);
+if refMic > 0
+    channelPairs = [refMic*ones(Ch-1,1) setdiff((1:Ch)', refMic)];
+    overcountRescale = 1;
+else
+    % TODO: this should probably be (Ch - 1) in the numerator
+    channelPairs = nchoosek(1:Ch, 2);
+    overcountRescale = Ch / (size(channelPairs,1) - 1);
+end
 
 if isempty(maskInit)
     % Run messl on each pair for several iterations to initialize parameters
@@ -202,7 +213,7 @@ for rep=1:Nrep
                 messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
                 ipdParams(c).ipdMode, lpIpd, ildParams(c).ildMode, lpIld, ...
                 spParams(c).spMode, lpSp, vis || rep == Nrep, reliability, ...
-                mrfCompatPot, mrfCompatExpSched(min(end,rep)));
+                mrfCompatPot, mrfCompatExpSched(min(end,rep)), mrfLbpIter);
             
             if useCombinedPost == 0
                 % Accumulate multi-channel posterior
@@ -214,13 +225,12 @@ for rep=1:Nrep
                 % calculation.
                 
                 % Combine binaural and GMM likelihoods and normalize:
-                overcountRescale = Ch / (size(channelPairs,1) - 1);
                 logCombinedMask = logMaskPrior + overcountRescale * (logMultichannelPosterior - single(log(squeeze(p_lr_iwt(1,:,:,:)))));
                 [ll(c,rep) p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
                     messlPosterior(W, T, I, Nt, C, logCombinedMask, ...
                     ipdParams(c).ipdMode, lpIpd, ildParams(c).ildMode, lpIld, ...
                     spParams(c).spMode, lpSp, vis || rep == Nrep, reliability, ...
-                    mrfCompatPot, mrfCompatExpSched(min(end,rep)));
+                    mrfCompatPot, mrfCompatExpSched(min(end,rep)), mrfLbpIter);
                 clear lp*
 
                 % ll should be non-decreasing
@@ -260,7 +270,6 @@ end
 params = struct('ipdParams', ipdParams, 'ildParams', ildParams, 'spParams', spParams);
 
 % Compute hard masks, potentially using the MRF model
-mrfLbpIter = 8;
 [~,~,~,hardSrcs] = messlMrfApply(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfHardCompatExp, mrfLbpIter, 'max');
 hardMasks = zeros(size(p_lr_iwt));
 for i = 1:max(hardSrcs(:))

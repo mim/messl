@@ -1,13 +1,11 @@
 function [ll p_lr_iwt nuIpd maskIpd nuIld maskIld nuSp maskSp] = ...
     messlPosterior(W, T, I, Nt, C, logMaskPrior, ...
     ipdMode, lpIpd, ildMode, lpIld, spMode, lpSp, vis, reliability, ...
-    mrfCompatPot, mrfCompatExp)
+    mrfCompatPot, mrfCompatExp, mrfLbpIter)
 % Defaults
 nuIpd = single(lpIpd); maskIpd = 0;
 nuIld = single(lpIld); maskIld = 0;
 nuSp  = single(lpSp);  maskSp  = 0;
-
-mrfLbpIter = 8;
 
 if vis || ~spMode
   % Normalize each term separated to demonstrate the contribution of
