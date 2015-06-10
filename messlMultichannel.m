@@ -123,6 +123,8 @@ if isempty(maskInit)
             kldiv(oi) = (targetMasks(:) - permMasks(:))' * log(targetMasks(:) ./ permMasks(:));
         end
         [~,oi] = min(kldiv);
+        masks(:,:,:,c) = masks(:,:,allOrds(oi,:),c);
+        targetMasks = mean(masks(:,:,:,1:c), 4);
         pTauIInit(:,:,c) = params.p_tauI(allOrds(oi,:),:);
     end
 else
@@ -260,7 +262,7 @@ for rep=1:Nrep
         end
     end
     
-    subplots(cellFrom3D(sum(logMultichannelPosteriors,4)), [], [], @(r,c,i) caxis([-10 0]))
+    subplots(cellFrom3D(mean(logMultichannelPosteriors,4)), [], [], @(r,c,i) caxis([-4 0]))
     drawnow
     
     if vis
