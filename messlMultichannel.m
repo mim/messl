@@ -107,7 +107,7 @@ if isempty(maskInit)
     % Run messl on each pair for several iterations to initialize parameters
     for c = 1:Np
         cp = channelPairs(c,:);
-        [p_lr_iwt params] = messl(X(:,:,cp), tau, I, varargin{:}, 'Nrep', 4, 'modes', [1 1 0 1 1 0]);
+        [p_lr_iwt params(c)] = messl(X(:,:,cp), tau, I, varargin{:}, 'Nrep', 4, 'modes', [1 1 0 1 1 0]);
         masks(:,:,:,c) = squeeze(p_lr_iwt(1,:,:,:));
     end
     
@@ -125,7 +125,7 @@ if isempty(maskInit)
         [~,oi] = min(kldiv);
         masks(:,:,:,c) = masks(:,:,allOrds(oi,:),c);
         targetMasks = mean(masks(:,:,:,1:c), 4);
-        pTauIInit(:,:,c) = params.p_tauI(allOrds(oi,:),:);
+        pTauIInit(:,:,c) = params(c).p_tauI(allOrds(oi,:),:);
     end
 else
     pTauIInit = ones(I+garbageSrc,length(tau),Np);
