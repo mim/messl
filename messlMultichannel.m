@@ -107,6 +107,7 @@ if isempty(maskInit)
     % Run messl on each pair for several iterations to initialize parameters
     for c = 1:Np
         cp = channelPairs(c,:);
+        fprintf('Channels: %d %d\n', cp(1), cp(2));
         [p_lr_iwt params(c)] = messl(X(:,:,cp), tau, I, varargin{:}, 'Nrep', 4, 'modes', [1 1 0 1 1 0]);
         masks(:,:,:,c) = squeeze(p_lr_iwt(1,:,:,:));
     end
@@ -145,6 +146,8 @@ if (Np > Ch) && useConsistentTdoa
 else
     tauPosInit = [];
 end
+
+fprintf('Done init, starting multi-channel MESSL...\n')
 
 % Start actual Multi-channel MESSL using those alignments.  Re-initialize
 % parameters.
@@ -192,6 +195,8 @@ logMultichannelPosteriors = zeros(W, T, I, Np);
 
 % Start EM
 for rep=1:Nrep
+    fprintf('ll(%02d) = ', rep);
+    
     for useCombinedPost = [0 1]
         for c = 1:Np
             cp = channelPairs(c,:);
@@ -256,7 +261,7 @@ for rep=1:Nrep
                 clear lp*
 
                 % ll should be non-decreasing
-                fprintf('ll(%02d,%02d) = %e\n', rep, c, ll(c,rep));
+                fprintf('%0.3e ', ll(c,rep));
                 
                 if (rep >= maskHold)
                     logMaskPrior = 0;
@@ -280,6 +285,7 @@ for rep=1:Nrep
             end
         end
     end
+    fprintf('\n');
     
     subplots(cellFrom3D(mean(logMultichannelPosteriors,4)), [], [], @(r,c,i) caxis([-4 0]))
     drawnow
