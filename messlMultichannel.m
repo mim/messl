@@ -67,7 +67,7 @@ function [p_lr_iwt params hardMasks] = messlMultichannel(X, tau, I, varargin)
  ipdMode, ildMode, xiMode, sigmaMode, dctMode, spMode, nfft, ...
  vis, Nrep, modes, sigmaInit, xiInit, sourcePriors, maskHold, ...
  reliability, ildPriorPrec, sr, mrfHardCompatExp, mrfCompatFile ...
- mrfCompatExpSched fixIPriors refMic mrfLbpIter] = ...
+ mrfCompatExpSched fixIPriors refMic mrfLbpIter useConsistentTdoa] = ...
     process_options(varargin, 'tauPosInit', [], 'pTauIInit', [], ...
     'ildInit', 0, 'ildStdInit', 10, 'maskInit', [], ...
     'garbageSrc', 0, 'ipdMode', 1, 'ildMode', -1, 'xiMode', -1, ...
@@ -76,7 +76,7 @@ function [p_lr_iwt params hardMasks] = messlMultichannel(X, tau, I, varargin)
     'sourcePriors', [], 'maskHold', 0, 'reliability', [], ...
     'ildPriorPrec', 0, 'sr', 16000, 'mrfHardCompatExp', 0, ...
     'mrfCompatFile', '', 'mrfCompatExpSched', [0 0 0 0 .02 .02 .02 .02 .05], ...
-    'fixIPriors', 0, 'refMic', 0, 'mrfLbpIter', 8);
+    'fixIPriors', 0, 'refMic', 0, 'mrfLbpIter', 8, 'useConsistentTdoa', 0);
 
 if ~isempty(modes)
   ipdMode   = modes(1);
@@ -115,23 +115,36 @@ if isempty(maskInit)
     % multinomial RV across sources, find permutation with minimum total
     % symmetrized KL divergence to reference (first mic pair).
     % TODO: find best reference mic pair.
-    targetMasks = masks(:,:,:,1);
-    allOrds = perms(1:size(targetMasks,3));
+    targetMasks = masks(:,:,1:I,1);
+    allOrds = perms(1:I);
     for c = 1:size(masks,4)
         for oi = 1:size(allOrds,1)
             permMasks = masks(:,:,allOrds(oi,:),c);
             kldiv(oi) = (targetMasks(:) - permMasks(:))' * log(targetMasks(:) ./ permMasks(:));
         end
         [~,oi] = min(kldiv);
-        masks(:,:,:,c) = masks(:,:,allOrds(oi,:),c);
-        targetMasks = mean(masks(:,:,:,1:c), 4);
-        pTauIInit(:,:,c) = params(c).p_tauI(allOrds(oi,:),:);
+        masks(:,:,1:I,c) = masks(:,:,allOrds(oi,:),c);
+        targetMasks = mean(masks(:,:,1:I,1:c), 4);
+        if garbageSrc
+            ord = [allOrds(oi,:) I+1];
+        else
+            ord = allOrds(oi,:);
+        end
+        pTauIInit(:,:,c) = params(c).p_tauI(ord,:);
     end
 else
     pTauIInit = ones(I+garbageSrc,length(tau),Np);
 end
 % % Hard-coded for test example...
 %tauPosInit = [-23; 0; 22];
+
+if (Np > Ch) && useConsistentTdoa
+    % Compute global TDOA at each mic, re-derive pairwise ITDs
+    perPairTdoa = tau(squeeze(argmax(pTauIInit,2)))';
+    [perMicTdoa tauPosInit] = perMicTdoaLs(perPairTdoa(:,1:end-garbageSrc), channelPairs);
+else
+    tauPosInit = [];
+end
 
 % Start actual Multi-channel MESSL using those alignments.  Re-initialize
 % parameters.
@@ -140,9 +153,15 @@ for c = 1:Np
     [~,~,~,W,T,~,L,R] = messlObsDerive(X(:,:,cp), tau, nfft);
     
     % Initialize the probability distributions and other parameters
-    [ipdParams(c) itds] = messlIpdInit(I, W, Nrep, tau, sr, X, tauPosInit, pTauIInit(:,:,c), ...
-        sigmaInit, xiInit, ipdMode, xiMode, sigmaMode, ...
-        garbageSrc, vis, fixIPriors);
+    if isempty(tauPosInit)
+        [ipdParams(c) itds] = messlIpdInit(I, W, Nrep, tau, sr, X, [], pTauIInit(:,:,c), ...
+            sigmaInit, xiInit, ipdMode, xiMode, sigmaMode, ...
+            garbageSrc, vis, fixIPriors);
+    else
+        [ipdParams(c) itds] = messlIpdInit(I, W, Nrep, tau, sr, X, tauPosInit(c,:), [], ...
+            sigmaInit, xiInit, ipdMode, xiMode, sigmaMode, ...
+            garbageSrc, vis, fixIPriors);
+    end
     clear lr
     %FIXME
     ildParams(c) = messlIldInit(I, W, sr, Nrep, ildInit, ildStdInit, ...
@@ -271,7 +290,13 @@ for rep=1:Nrep
     end
 end
 
-params = struct('ipdParams', ipdParams, 'ildParams', ildParams, 'spParams', spParams);
+% Compute per-mic TDOAs
+pTauI = cat(3, ipdParams.p_tauI);
+perPairTdoa = tau(squeeze(argmax(pTauI,2)))';
+perMicTdoa = perMicTdoaLs(perPairTdoa(:,1:end-garbageSrc), channelPairs);
+
+params = struct('ipdParams', ipdParams, 'ildParams', ildParams, ...
+    'spParams', spParams, 'perMicTdoa', perMicTdoa);
 
 % Compute hard masks, potentially using the MRF model
 [~,~,~,hardSrcs] = messlMrfApply(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfHardCompatExp, mrfLbpIter, 'max');
@@ -279,4 +304,3 @@ hardMasks = zeros(size(p_lr_iwt));
 for i = 1:max(hardSrcs(:))
     hardMasks(:,:,:,i) = repmat(permute(hardSrcs == i, [3 1 2]), [2 1 1]);
 end
-
