@@ -40,5 +40,5 @@ while ~all(keep(:) == lastKeep(:)) || any(mean(keep,1) < minKeepPairFrac) || any
         break
     end
 end
-plot(estPerPair, perPair(1:end-1,:), '.')
-drawnow
+%plot(estPerPair, perPair(1:end-1,:), '.')
+%drawnow
