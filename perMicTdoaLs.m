@@ -3,7 +3,7 @@ function [perMic estPerPair err] = perMicTdoaLs(perPair, channelPairs, maxDelayE
 % Convert pair-wise ITDs measured in samples into approximate per-mic TDOAs using least squares
 
 if ~exist('maxDelayErr', 'var') || isempty(maxDelayErr), maxDelayErr = 4; end
-if ~exist('beRobust', 'var') || isempty(beRobust), beRobust = 0; end
+if ~exist('beRobust', 'var') || isempty(beRobust), beRobust = 1; end
 minKeepPairFrac = 0.5;
 
 Ns = size(perPair, 2);
