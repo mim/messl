@@ -3,6 +3,9 @@ if ~exist('doPlot', 'var') || isempty(doPlot), doPlot = 0; end
 
 if ~isempty(mrfCompatPot) && (mrfCompatExp ~= 0)
     [newNuIld hardSrcs] = mrfGridLbp(nuIld, mrfCompatPot.^mrfCompatExp, mrfLbpIter, bpType, doPlot);
+    if any(nuIld(:) == 0)
+        error('About to divide by 0...')
+    end
     nuIpd = bsxfun(@times, nuIpd, newNuIld ./ nuIld);
     nuIld = newNuIld;
     p_lr_iwt = repmat(permute(nuIld, [4 1 2 3]), [2 1 1 1]);

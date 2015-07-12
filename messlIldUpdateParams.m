@@ -1,6 +1,9 @@
 function ildParams = messlIldUpdateParams(W, T, I, Nt, C, rep, ildParams, ...
     nuIld, A, Nrep)
 % Compute the ILD terms
+
+minVar = 1e-8;
+
 if ~ildParams.dctMode
 %   if rep <= 3 && ildParams.garbageSrc
 %     % Wait a couple iterations if using garbage source so that the
@@ -32,6 +35,9 @@ if ~ildParams.dctMode
   ildParams.h2_wi = (h2Avg * ildParams.h2_wi) ./ ...
       (h2Avg * (squeeze(sum(nuIld,2)) + ildParams.priorPrec));
 
+  % Prevent h2 going to 0
+  ildParams.h2_wi = max(ildParams.h2_wi, minVar);
+  
   if ildParams.garbageSrc && 0
     ildParams.h2_wi(:,end) = lastH2;
   end
