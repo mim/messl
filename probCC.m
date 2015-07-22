@@ -29,6 +29,5 @@ end
 
 E = zeros([size(L) length(t)]);
 for i=1:length(t)
-  predicted = sparse(diag(1./exp(j * w * t(i))));
-  E(:,:,i) = predicted * LonR;
+  E(:,:,i) = bsxfun(@times, LonR, exp(-1j * w * t(i)));
 end

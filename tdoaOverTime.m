@@ -20,7 +20,9 @@ switch lower(method)
   h = npEnt(angle(ee), 1);
   T = reshape(h, s(2), s(3))';
  case {'gcc', 'phat', 'p', 'g'}
-  T = squeeze(real(sum(E ./ abs(E), 1)))';
+     eReal = real(E) ./ sqrt(real(E).^2 + imag(E).^2);
+     realEPhase = sum(eReal, 1);
+     T = squeeze(realEPhase)';
  case 'a'
   T = squeeze(abs(sum(E ./ abs(E), 1)))'; 
  case 'i'
