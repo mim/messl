@@ -1,4 +1,4 @@
-function [perMic estPerPair err] = perMicTdoaLs(perPair, channelPairs, maxDelayErr, beRobust)
+function [perMic estPerPair err failed] = perMicTdoaLs(perPair, channelPairs, maxDelayErr, beRobust)
 
 % Convert pair-wise ITDs measured in samples into approximate per-mic TDOAs using least squares
 
@@ -21,10 +21,11 @@ perPair = [perPair; zeros(1, Ns)];
 
 lastKeep = false(size(perPair));
 keep = true(size(perPair));
+unRobustObs = true(1, size(perPair,2));
 
 % Loop until stable, unless too many pairs are excluded
-while ~all(keep(:) == lastKeep(:)) || any(mean(keep,1) < minKeepPairFrac) || any(sum(keep,1) < Ch)
-    for s = 1:Ns
+while any(unRobustObs) % ~all(keep(:) == lastKeep(:)) || any(mean(keep,1) < minKeepPairFrac) || any(sum(keep,1) < Ch)
+    for s = find(unRobustObs) %1:Ns
         % Robust least squares
         perMic(:,s) = A(keep(:,s),:) \ perPair(keep(:,s),s);
     end
@@ -32,13 +33,17 @@ while ~all(keep(:) == lastKeep(:)) || any(mean(keep,1) < minKeepPairFrac) || any
     % Error per mic pair in the model
     estPerPair = A(1:end-1,:) * perMic;
     err = estPerPair - perPair(1:end-1,:);
-
+ 
     lastKeep = keep;
     keep = [abs(err) < maxDelayErr; true(1, Ns)];
     
     if ~beRobust
+        failed = false(1, Ns);
         break
-    end
+    end    
+
+    failed = (mean(keep,1) < minKeepPairFrac) | (sum(keep,1) <= Ch);
+    unRobustObs = any(keep ~= lastKeep, 1) & ~failed;
 end
 %plot(estPerPair, perPair(1:end-1,:), '.')
 %drawnow
