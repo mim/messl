@@ -141,7 +141,8 @@ end
 
 if (Np > Ch) && useConsistentTdoa
     % Compute global TDOA at each mic, re-derive pairwise ITDs
-    perPairTdoa = tau(squeeze(argmax(pTauIInit,2)))';
+    perPairTdoa = tau(squeeze(argmax(pTauIInit,2)))';   % posterior mode
+    % perPairTdoa = squeeze(sum(bsxfun(@times, tau, pTauIInit), 2) ./ sum(pTauIInit,2))';  % posterior mean
     [perMicTdoa tauPosInit] = perMicTdoaLs(perPairTdoa(:,1:end-garbageSrc), channelPairs);
 else
     tauPosInit = [];
@@ -298,11 +299,13 @@ end
 
 % Compute per-mic TDOAs
 pTauI = cat(3, ipdParams.p_tauI);
-perPairTdoa = tau(squeeze(argmax(pTauI,2)))';
+perPairTdoa = tau(squeeze(argmax(pTauI,2)))';   % posterior mode
+% perPairTdoa = squeeze(sum(bsxfun(@times, tau, pTauI), 2) ./ sum(pTauI,2))';  % posterior mean
 perMicTdoa = perMicTdoaLs(perPairTdoa(:,1:end-garbageSrc), channelPairs);
 
 params = struct('ipdParams', ipdParams, 'ildParams', ildParams, ...
-    'spParams', spParams, 'perMicTdoa', perMicTdoa);
+    'spParams', spParams, 'perMicTdoa', perMicTdoa, ...
+    'channelPairs', channelPairs, 'tau', tau);
 
 % Compute hard masks, potentially using the MRF model
 [~,~,~,hardSrcs] = messlMrfApply(nuIld, nuIpd, p_lr_iwt, mrfCompatPot, mrfHardCompatExp, mrfLbpIter, 'max');

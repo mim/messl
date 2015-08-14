@@ -42,7 +42,7 @@ while any(unRobustObs) % ~all(keep(:) == lastKeep(:)) || any(mean(keep,1) < minK
         break
     end    
 
-    failed = (mean(keep,1) < minKeepPairFrac) | (sum(keep,1) <= Ch);
+    failed = (mean(keep,1) < minKeepPairFrac) | (sum(keep,1) <= Ch+1);
     unRobustObs = any(keep ~= lastKeep, 1) & ~failed;
 end
 %plot(estPerPair, perPair(1:end-1,:), '.')
