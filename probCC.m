@@ -10,8 +10,8 @@ function [E,w] = probCC(lr, t, frame, doProduct)
 % over.  Returns the full distribution of the ratio of the two
 % channels for each lag.  Frame is the size of the FFT window to use.
 
-if(nargin < 3) frame = 1024; end
-if(nargin < 4) doProduct = 0; end
+if(nargin < 3) || (frame <= 0), frame = 1024; end
+if(nargin < 4), doProduct = 0; end
 
 [L,R] = binSpec(lr, frame);
 
@@ -29,6 +29,5 @@ end
 
 E = zeros([size(L) length(t)]);
 for i=1:length(t)
-  predicted = sparse(diag(1./exp(j * w * t(i))));
-  E(:,:,i) = predicted * LonR;
+  E(:,:,i) = bsxfun(@times, LonR, exp(-1j * w * t(i)));
 end

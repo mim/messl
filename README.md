@@ -20,12 +20,7 @@ addpath('./plottools/')
 lr = lr';
 
 % Derive grid of tau values (use your numbers here)
-c    = 340;  % speed of sound in air [M/s]
-d    = 0.3;  % slightly more than the acoustic distance between microphones [M]
-nTau = 31;   % number of tau samples to use
-
-maxItd = fs * d / c;  % maximum ITD [samples]
-tau = linspace(-maxItd, maxItd, nTau);
+tau = tauGrid(0.15, fs, 31);
 
 % Run MESSL
 [m,p] = messl(lr, tau, 2, 'vis', 1);

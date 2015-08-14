@@ -12,6 +12,11 @@ if ~exist('layout', 'var'), layout = []; end
 if ~exist('names', 'var'), names = {}; end
 if ~exist('formatFn', 'var') || isempty(formatFn), formatFn = @(r,c,i) []; end
 
+if isNoDisplay()
+    % Don't bother...
+    return
+end
+
 if isstruct(data)
     names = fieldnames(data);
     data  = struct2cell(data);
