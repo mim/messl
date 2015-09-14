@@ -59,4 +59,6 @@ for i=1:length(plots)
 
 end
 
-subplot 111
+if ~isempty(plots)
+    subplot 111
+end
