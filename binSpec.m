@@ -1,6 +1,6 @@
-function [L,R,hop] = binSpec(lr, nfft, hop)
+function [L,R,hop,nfft] = binSpec(lr, nfft, hop)
 
-% [L,R,hop] = binSpec(lr, nfft, hop)
+% [L,R,hop,nfft] = binSpec(lr, nfft, hop)
 %
 % Make a spectrogram of the left and right channels of the waveform
 % LR.  LR(1,:) is the left channel, LR(2,:) is the right channel.
@@ -17,7 +17,7 @@ if(ndims(lr) == 3)
   % Already specgrammed
   L = lr(:,:,1);
   R = lr(:,:,2);
-  frame = 2*(size(lr,1)+1);
+  nfft = 2*(size(lr,1)+1);
 else
   % NB: stft gives negative phase of specgram, so need to reverse the
   % left and right signals
