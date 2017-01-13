@@ -12,3 +12,7 @@ end
 % From http://www.mathworks.com/matlabcentral/newsreader/view_thread/136261
 ss = get(0, 'Screensize');
 v = all(ss(3:4) == [1 1]);
+
+
+function m = reMatch(string, pattern)
+m = ~isempty(regexp(string, pattern, 'match', 'once'));
